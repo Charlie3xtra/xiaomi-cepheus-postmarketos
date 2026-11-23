@@ -15,6 +15,11 @@ MODULE = Path('/usr/local/lib/cepheus/cepheus_uart13.ko')
 EXPECTED_HASH = Path('/usr/local/lib/cepheus/uart13-module.sha256')
 IDENTITY = Path('/var/lib/cepheus-private/bluetooth-address')
 POLICY = Path('/var/lib/cepheus-private/bluetooth-startup-policy')
+FIRMWARE = Path('/lib/firmware/qca')
+STOCK_ALIASES = {
+    'crbtfw01.tlv': 'cepheus-crbtfw21.tlv',
+    'crnv01.bin': 'cepheus-crnv21.bin',
+}
 
 
 def controller():
@@ -84,6 +89,10 @@ def main():
     address = canonical[::-1]  # Management/HCI addresses use little-endian order.
     if hashlib.sha256(MODULE.read_bytes()).hexdigest() != EXPECTED_HASH.read_text().strip():
         raise RuntimeError('Guarded UART module checksum mismatch')
+    for alias, target in STOCK_ALIASES.items():
+        link = FIRMWARE / alias
+        if not link.is_symlink() or os.readlink(link) != target or not link.is_file():
+            raise RuntimeError(f'Missing or unexpected stock firmware alias: {alias}')
     if policy == 'trial':
         # Consume a trial before touching hardware, so a failed boot cannot loop.
         temporary = POLICY.with_name('.bluetooth-startup-policy.tmp')
@@ -101,9 +110,8 @@ def main():
             os.close(descriptor)
     if not Path('/sys/module/cepheus_uart13').exists():
         subprocess.run(['insmod', str(MODULE)], check=True, timeout=20)
-    firmware_property = (UART / 'bluetooth/firmware-name').read_bytes()
-    if firmware_property != b'cepheus-crnv21\0cepheus-crbtfw21.tlv\0':
-        raise RuntimeError('Expected explicit stock firmware selection is absent')
+    if (UART / 'bluetooth/firmware-name').exists():
+        raise RuntimeError('Unexpected explicit firmware property on the UART13 route')
     mgmt = Management()
     try:
         deadline = time.monotonic() + 35

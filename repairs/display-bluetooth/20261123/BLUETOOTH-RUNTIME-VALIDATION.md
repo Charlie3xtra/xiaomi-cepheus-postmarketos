@@ -35,3 +35,17 @@ No boot partition was intentionally written. Installing linux-firmware-qca invok
 Native board-ID/NVM choice, repeatable reboot initialization, longer coexistence and power cycling, real pairing/reconnect, suspend/resume and Bluetooth audio remain separate checks. No pairing was attempted with unknown nearby devices.
 
 Primary references: [Qualcomm controller binding](https://github.com/torvalds/linux/blob/v6.17/Documentation/devicetree/bindings/net/bluetooth/qualcomm-bluetooth.yaml), [driver firmware selection](https://github.com/torvalds/linux/blob/v6.17/drivers/bluetooth/btqca.c), [Qualcomm HAL address handling](https://github.com/Sushrut1101/android_vendor_qcom_proprietary/blob/39c82425849dc674f9e65a45fa3df3065f527652/bluetooth/hidl_transport/bt/1.0/default/bluetooth_address.cpp), [BlueZ MGMT protocol](https://github.com/bluez/bluez/blob/master/doc/mgmt-protocol.rst). A same-ID controller with the same revision derivation issue was independently tested by the [Hotdog port](https://github.com/Sr-0w/hotdog-linux-bringup/blob/main/docs/evidence/2026-08-04-mainline616-bluetooth.md); Mi9's own stock firmware and runtime results provide the device-specific evidence above.
+
+## Follow-up: reboot with verified Bluetooth startup
+
+The board-ID trial booted but Bluetooth setup failed. The controller reported its version and the rampatch transfer proceeded. The board-ID query and subsequent NVM transfer timed out. The trial automatically disarmed.
+
+The installed helper now loads the verified route-only UART13 module. It checks that the two requested firmware paths are local symlinks from crbtfw01.tlv to cepheus-crbtfw21.tlv and from crnv01.bin to cepheus-crnv21.bin. These are the same original Xiaomi firmware and generic NVM that passed the runtime scan. Bypassing the board-ID query restored initialization. The module source and overlay are in runtime-uart13 at commit 1fea98777bd652eba47eb6a85b4b6db3493a3f51. The matching module is now included as artifacts/cepheus_uart13-route.ko.
+
+- A normal software reboot restored USB SSH without physical intervention. The startup service completed, and BlueZ powered on the controller.
+- A 15-second scan found 15 devices. Concurrent Wi-Fi pings at 5180 MHz were 60/60, with zero loss and 1.542 ms average gateway RTT.
+- An additional Bluetooth off/on cycle completed. The driver logged a successful UART setup and zero firmware download errors.
+- ServerDeck, touch enumeration and orientation recovered. The display patch persisted. The boot-time DSI timeout and Bluetooth frame-reassembly warnings still appeared.
+- Factory addresses and original Xiaomi binary firmware remain stored on the individual phone. The startup policy was enabled after testing. Disable the service and reboot to roll back the runtime overlay.
+
+This verifies startup, scanning, a power cycle and basic Wi-Fi coexistence on this unit. Pairing, audio, suspend/resume, board-specific NVM and sustained radio traffic remain open.
