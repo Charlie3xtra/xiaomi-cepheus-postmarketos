@@ -1,0 +1,38 @@
+Subject: [LOCAL DIAGNOSTIC] drm/msm/dsi: log already sampled error status
+
+Record the existing powered error-handler samples before they are cleared.
+This is an AI-assisted local diagnostic, not an upstream submission or a
+claimed fix. No Signed-off-by attestation is made on behalf of the user.
+
+---
+
+diff --git a/drivers/gpu/drm/msm/dsi/dsi_host.c b/drivers/gpu/drm/msm/dsi/dsi_host.c
+--- a/drivers/gpu/drm/msm/dsi/dsi_host.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_host.c
+@@ -1551,6 +1551,8 @@
+ 	status = dsi_read(msm_host, REG_DSI_ACK_ERR_STATUS);
+ 
+ 	if (status) {
++		pr_warn_ratelimited("cepheus-dsi%d: ack=0x%08x\n",
++				    msm_host->id, status);
+ 		dsi_write(msm_host, REG_DSI_ACK_ERR_STATUS, status);
+ 		/* Writing of an extra 0 needed to clear error bits */
+ 		dsi_write(msm_host, REG_DSI_ACK_ERR_STATUS, 0);
+@@ -1565,6 +1567,8 @@
+ 	status = dsi_read(msm_host, REG_DSI_TIMEOUT_STATUS);
+ 
+ 	if (status) {
++		pr_warn_ratelimited("cepheus-dsi%d: timeout=0x%08x\n",
++				    msm_host->id, status);
+ 		dsi_write(msm_host, REG_DSI_TIMEOUT_STATUS, status);
+ 		msm_host->err_work_state |= DSI_ERR_STATE_TIMEOUT;
+ 	}
+@@ -1594,6 +1598,8 @@
+ 
+ 	/* fifo underflow, overflow */
+ 	if (status) {
++		pr_warn_ratelimited("cepheus-dsi%d: fifo=0x%08x\n",
++				    msm_host->id, status);
+ 		dsi_write(msm_host, REG_DSI_FIFO_STATUS, status);
+ 		msm_host->err_work_state |= DSI_ERR_STATE_FIFO;
+ 		if (status & DSI_FIFO_STATUS_CMD_MDP_FIFO_UNDERFLOW)
