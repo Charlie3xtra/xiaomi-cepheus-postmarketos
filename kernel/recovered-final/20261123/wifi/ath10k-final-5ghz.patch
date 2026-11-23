@@ -1,0 +1,120 @@
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+index 6f78f1752..077c77364 100644
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -716,6 +716,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.dev_id = 0,
+ 		.bus = ATH10K_BUS_SNOC,
+ 		.name = "wcn3990 hw1.0",
++		.no_pairwise_key_del_ind = true,
+ 		.led_pin = 0,
+ 		.continuous_frag_desc = true,
+ 		.tx_chain_mask = 0x7,
+diff --git a/drivers/net/wireless/ath/ath10k/debug.c b/drivers/net/wireless/ath/ath10k/debug.c
+index b75202204..951b05fb0 100644
+--- a/drivers/net/wireless/ath/ath10k/debug.c
++++ b/drivers/net/wireless/ath/ath10k/debug.c
+@@ -2171,6 +2171,13 @@ static ssize_t ath10k_debug_fw_checksums_read(struct file *file,
+ 
+ 	mutex_lock(&ar->conf_mutex);
+ 
++	/* SNOC/non-BMI firmware may be loaded remotely, without host blobs. */
++	if (!ar->normal_mode_fw.fw_file.firmware ||
++	    !ar->normal_mode_fw.board) {
++		ret_cnt = -EOPNOTSUPP;
++		goto out_unlock;
++	}
++
+ 	len += scnprintf(buf + len, buf_len - len,
+ 			 "firmware-N.bin\t\t%08x\n",
+ 			 crc32_le(0, ar->normal_mode_fw.fw_file.firmware->data,
+@@ -2198,6 +2205,7 @@ static ssize_t ath10k_debug_fw_checksums_read(struct file *file,
+ 
+ 	ret_cnt = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+ 
++out_unlock:
+ 	mutex_unlock(&ar->conf_mutex);
+ 
+ 	kfree(buf);
+diff --git a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/net/wireless/ath/ath10k/hw.h
+index da71dce9b..31c0a098d 100644
+--- a/drivers/net/wireless/ath/ath10k/hw.h
++++ b/drivers/net/wireless/ath/ath10k/hw.h
+@@ -638,6 +638,9 @@ struct ath10k_hw_params {
+ 
+ 	/* The hardware support multicast frame registrations */
+ 	bool mcast_frame_registration;
++
++	/* WCN3990 does not acknowledge pairwise key removal over HTT. */
++	bool no_pairwise_key_del_ind;
+ };
+ 
+ struct htt_resp;
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 24dd794e3..3ed4488a3 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -10,6 +10,7 @@
+ #include "mac.h"
+ 
+ #include <linux/export.h>
++#include <linux/moduleparam.h>
+ #include <net/cfg80211.h>
+ #include <net/mac80211.h>
+ #include <linux/etherdevice.h>
+@@ -29,6 +30,17 @@
+ #include "wow.h"
+ #include "leds.h"
+ 
++/* Optional workaround for WCN3990 firmware with broken active 5 GHz scans.
++ * Keep other devices and firmware on the normal path unless explicitly enabled.
++ */
++static bool wcn3990_passive_scan;
++module_param(wcn3990_passive_scan, bool, 0444);
++MODULE_PARM_DESC(wcn3990_passive_scan, "Passive 5 GHz scans on WCN3990");
++
++static bool wcn3990_vht80;
++module_param(wcn3990_vht80, bool, 0444);
++MODULE_PARM_DESC(wcn3990_vht80, "Limit WCN3990 VHT bandwidth to 80 MHz");
++
+ /*********/
+ /* Rates */
+ /*********/
+@@ -317,6 +329,14 @@ static int ath10k_install_key(struct ath10k_vif *arvif,
+ 	if (ret)
+ 		return ret;
+ 
++	/* WCN3990 sends no security indication for a pairwise key deletion.
++	 * Keep waiting for installations and group-key changes: those do
++	 * generate indications and must retain their timeout protection.
++	 */
++	if (cmd == DISABLE_KEY && !(flags & WMI_KEY_GROUP) &&
++	    ar->hw_params.no_pairwise_key_del_ind)
++		return 0;
++
+ 	time_left = wait_for_completion_timeout(&ar->install_key_done, 3 * HZ);
+ 	if (time_left == 0)
+ 		return -ETIMEDOUT;
+@@ -3441,6 +3461,10 @@ static int ath10k_update_channel_list(struct ath10k *ar)
+ 			passive = channel->flags & IEEE80211_CHAN_NO_IR;
+ 			ch->passive = passive;
+ 
++			if (wcn3990_passive_scan && QCA_REV_WCN3990(ar) &&
++			    band == NL80211_BAND_5GHZ)
++				ch->passive = true;
++
+ 			/* the firmware is ignoring the "radar" flag of the
+ 			 * channel and is scanning actively using Probe Requests
+ 			 * on "Radar detection"/DFS channels which are not
+@@ -4894,6 +4918,11 @@ static struct ieee80211_sta_vht_cap ath10k_create_vht_cap(struct ath10k *ar)
+ 	vht_cap.vht_supported = 1;
+ 	vht_cap.cap = ar->vht_cap_info;
+ 
++	/* Some firmware advertises wide-channel modes it cannot operate. */
++	if (wcn3990_vht80 && QCA_REV_WCN3990(ar))
++		vht_cap.cap &= ~(IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK |
++				 IEEE80211_VHT_CAP_SHORT_GI_160);
++
+ 	if (ar->vht_cap_info & (IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE |
+ 				IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE)) {
+ 		val = ath10k_mac_get_vht_cap_bf_sts(ar);

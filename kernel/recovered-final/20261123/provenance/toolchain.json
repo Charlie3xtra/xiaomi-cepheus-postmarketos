@@ -1,0 +1,14 @@
+{
+  "tools": [
+    "aarch64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0",
+    "GNU ld (GNU Binutils for Debian) 2.44",
+    "GNU Make 4.4.1",
+    "Version: DTC 1.7.2"
+  ],
+  "ARCH": "arm64",
+  "CROSS_COMPILE": "aarch64-linux-gnu-",
+  "LOCALVERSION_argument": "",
+  "kernel_release": "6.17.0-sm8150",
+  "build_number": 8,
+  "config_sha256": "a823dbb4b67d87fc4dff4fa4b479c00cf2b7d83bb40592e87fe4e42570b848dc"
+}

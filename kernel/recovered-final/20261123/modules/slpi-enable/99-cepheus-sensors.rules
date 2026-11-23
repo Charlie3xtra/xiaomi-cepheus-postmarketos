@@ -1,0 +1,2 @@
+# Calibrated with the cepheus earpiece upright; preserve the screen-normal Z axis.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp", ENV{ACCEL_MOUNT_MATRIX}="-1,0,0;0,-1,0;0,0,1"

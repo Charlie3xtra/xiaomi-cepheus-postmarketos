@@ -1,0 +1,25 @@
+/dts-v1/;
+/plugin/;
+/ {
+    fragment@0 {
+        target-path = "/reserved-memory";
+        __overlay__ {
+            #address-cells = <2>;
+            #size-cells = <2>;
+            cepheus_ssc_pool: cepheus-ssc-pool {
+                compatible = "shared-dma-pool";
+                alloc-ranges = <0 0 0 0xffffffff>;
+                alignment = <0 0x400000>;
+                size = <0 0x1000000>;
+                reusable;
+            };
+        };
+    };
+    fragment@1 {
+        target-path = "/soc@0/remoteproc@2400000/glink-edge/fastrpc";
+        __overlay__ {
+            memory-region = <&cepheus_ssc_pool>;
+            qcom,vmids = <3 5 6>;
+        };
+    };
+};

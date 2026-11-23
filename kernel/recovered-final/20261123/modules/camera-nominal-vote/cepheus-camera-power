@@ -1,0 +1,23 @@
+#!/usr/bin/python3
+"""Legacy-kernel fallback; a corrected DT already requests stock camera NOM."""
+from pathlib import Path
+import struct
+import subprocess
+
+base=Path('/proc/device-tree')
+node=base/'soc@0/clock-controller@ad00000'
+required=(node/'required-opps').read_bytes()
+opp=base/'soc@0/rsc@18200000/power-controller/opp-table'
+for p in opp.iterdir():
+    if not p.is_dir() or not (p/'phandle').exists():
+        continue
+    if (p/'phandle').read_bytes()==required:
+        level=struct.unpack('>I',(p/'opp-level').read_bytes())[0]
+        if level>=256:
+            print('Camera DT already requests stock NOM; no fallback vote needed')
+        else:
+            subprocess.run(['modprobe','cepheus_camera_nominal'],check=True)
+            print('Legacy camera DT floor',level,'temporarily raised to stock NOM')
+        break
+else:
+    raise SystemExit('Unable to verify camera power OPP; no vote changed')

@@ -1,0 +1,670 @@
+diff --git a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-cepheus.dts b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-cepheus.dts
+index fda66e2cd..6602b77c6 100644
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-cepheus.dts
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-cepheus.dts
+@@ -427,6 +427,8 @@ vreg_l17a_3p0: ldo17 {
+ 			regulator-min-microvolt = <2856000>;
+ 			regulator-max-microvolt = <3008000>;
+ 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++			regulator-always-on;
++			regulator-boot-on;
+ 			regulator-name = "pm8150_l17a_3p0";
+ 		};
+ 
+@@ -705,6 +707,10 @@ &gpi_dma2 {
+ 	status = "okay";
+ };
+ 
++&qupv3_id_2 {
++	status = "okay";
++};
++
+ &i2c17 {
+ 	status = "okay";
+ 	clock-frequency = <400000>;
+@@ -784,9 +790,10 @@ camera@1a {
+ 		orientation = <1>;
+ 		rotation = <90>;
+ 
+-		clocks = <&camcc CAM_CC_MCLK0_CLK>;
+-		assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
++		clocks = <&camcc CAM_CC_MCLK1_CLK>;
++		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+ 		assigned-clock-rates = <19200000>;
++		power-domains = <&camcc TITAN_TOP_GDSC>;
+ 
+ 		vio-supply = <&camera_viodd_ldo>;
+ 		vana-supply = <&vreg_s5a_1p9>;
+diff --git a/drivers/gpu/drm/msm/msm_gem.c b/drivers/gpu/drm/msm/msm_gem.c
+index e7631f4ef..0745d958f 100644
+--- a/drivers/gpu/drm/msm/msm_gem.c
++++ b/drivers/gpu/drm/msm/msm_gem.c
+@@ -1120,12 +1120,16 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
+ 		put_pages(obj);
+ 	}
+ 
+-	if (obj->resv != &obj->_resv) {
++	/*
++	 * In error paths, we could end up here before msm_gem_new_handle()
++	 * has changed obj->resv to point to the shared resv.  In this case,
++	 * we don't want to drop a ref to the shared r_obj that we haven't
++	 * taken yet.
++	 */
++	if ((msm_obj->flags & MSM_BO_NO_SHARE) && (obj->resv != &obj->_resv)) {
+ 		struct drm_gem_object *r_obj =
+ 			container_of(obj->resv, struct drm_gem_object, _resv);
+ 
+-		WARN_ON(!(msm_obj->flags & MSM_BO_NO_SHARE));
+-
+ 		/* Drop reference we hold to shared resv obj: */
+ 		drm_gem_object_put(r_obj);
+ 	}
+diff --git a/drivers/media/i2c/imx586.c b/drivers/media/i2c/imx586.c
+index 1a34a9475..8e5036891 100644
+--- a/drivers/media/i2c/imx586.c
++++ b/drivers/media/i2c/imx586.c
+@@ -138,6 +138,7 @@ struct imx586 {
+ 	struct gpio_desc *custom2_gpio;
+ 	struct gpio_desc *vdig_enable_gpio;
+ 	struct clk *inclk;
++	struct clk *mclk1;
+ 	struct regulator *vana;
+ 	struct regulator *vdig;
+ 	struct regulator *vio;
+@@ -439,7 +440,7 @@ static const struct imx586_mode supported_mode = {
+ 	.vblank = 66,
+ 	.vblank_min = 57,
+ 	.vblank_max = 62535,
+-	.pclk = 478900000,
++	.pclk = 724480000,
+ 	.link_freq_idx = 0,
+ 	.code = MEDIA_BUS_FMT_SRGGB10_1X10,
+ 	.reg_list = {
+@@ -636,6 +637,12 @@ static int imx586_set_ctrl(struct v4l2_ctrl *ctrl)
+ 	int ret;
+ 
+ 	switch (ctrl->id) {
++	case V4L2_CID_TEST_PATTERN:
++		if (!pm_runtime_get_if_in_use(imx586->dev))
++			return 0;
++		ret = imx586_write_reg(imx586, 0x0601, 1, ctrl->val ? 2 : 0);
++		pm_runtime_put(imx586->dev);
++		break;
+ 	case V4L2_CID_VBLANK:
+ 		imx586->vblank = imx586->vblank_ctrl->val;
+ 
+@@ -894,6 +901,44 @@ static int imx586_start_streaming(struct imx586 *imx586)
+ 		return ret;
+ 	}
+ 
++	/* DBG_DUMP_V1 */
++	{
++		static const struct { u16 reg; const char *name; } dbg[] = {
++			{ 0x0100, "MODE_SELECT" },
++			{ 0x0112, "CSI_DT_LO" },
++			{ 0x0113, "CSI_DT_HI" },
++			{ 0x0114, "CSI_LANE_MODE" },
++			{ 0x0301, "FRM_LEN_CTL" },
++			{ 0x0303, "FRM_LEN_CTL2" },
++			{ 0x0305, "PLL_MPY" },
++			{ 0x0307, "PLL_MPY_MD" },
++			{ 0x0309, "PLL_MPY_MIPI" },
++			{ 0x030b, "PLL_MPY_MIPI2 " },
++			{ 0x030d, "PLL_MPY_2" },
++			{ 0x0340, "VMAX_LO" },
++			{ 0x0341, "VMAX_HI" },
++			{ 0x0342, "HMAX_LO" },
++			{ 0x0343, "HMAX_HI" },
++			{ 0x0348, "X_OUTPUT_SIZE_HI" },
++			{ 0x0349, "X_OUTPUT_SIZE_LO" },
++			{ 0x034a, "Y_OUTPUT_SIZE_HI" },
++			{ 0x034b, "Y_OUTPUT_SIZE_LO" },
++		};
++		u32 v;
++		int di;
++
++		for (di = 0; di < (int)ARRAY_SIZE(dbg); di++) {
++			v = 0xdeadbeef;
++			if (imx586_read_reg(imx586, dbg[di].reg, 1, &v))
++				dev_info(imx586->dev, "dbg %-20s(0x%04x)=ERR\n",
++					 dbg[di].name, dbg[di].reg);
++			else
++				dev_info(imx586->dev, "dbg %-20s(0x%04x)=0x%02x\n",
++					 dbg[di].name, dbg[di].reg, v & 0xff);
++		}
++		dev_info(imx586->dev, "dbg inclk=%lu Hz\n", clk_get_rate(imx586->inclk));
++	}
++
+ 	dev_info(imx586->dev, "streaming 4000x3000 RAW10 over three-trio C-PHY\n");
+ 
+ 	return 0;
+@@ -959,77 +1004,21 @@ static int imx586_set_stream(struct v4l2_subdev *sd, int enable)
+ static int imx586_detect(struct imx586 *imx586)
+ {
+ 	struct i2c_client *client = v4l2_get_subdevdata(&imx586->sd);
+-	struct i2c_adapter *cur_adapter = client->adapter;
+-	struct i2c_adapter *test_adapter;
+-	static const unsigned short primary_addrs[] = { 0x1a, 0x10, 0x20 };
+-	unsigned short try_addr;
+ 	u32 val = 0;
+-	int ret = -ENXIO, attempt, i, bus_nr;
+-
+-	dev_info(imx586->dev, "Starting sensor detection on adapter '%s' (bus %d)...\n",
+-		 client->adapter->name, client->adapter->nr);
+-
+-	for (attempt = 0; attempt < 2; attempt++) {
+-		if (attempt == 1) {
+-			dev_info(imx586->dev, "Attempt 1 failed. Trying with reset pin toggled...\n");
+-			gpiod_set_value_cansleep(imx586->reset_gpio, 1);
+-			msleep(20);
+-		}
+-
+-		/* Check primary addresses first on current adapter */
+-		for (i = 0; i < ARRAY_SIZE(primary_addrs); i++) {
+-			client->addr = primary_addrs[i];
+-			ret = imx586_read_reg(imx586, IMX586_REG_ID, 2, &val);
+-			if (ret == 0) {
+-				dev_info(imx586->dev, "Sensor responded at addr 0x%02x (id=0x%04x, expected 0x%04x)\n",
+-					 client->addr, val, IMX586_ID);
+-				if (val == IMX586_ID)
+-					return 0;
+-			}
+-		}
++	int ret;
+ 
+-		/* Scan entire address space (0x08 - 0x77) on current adapter */
+-		dev_info(imx586->dev, "Scanning all I2C addresses on current adapter %s (bus %d)...\n",
+-			 client->adapter->name, client->adapter->nr);
+-		for (try_addr = 0x08; try_addr <= 0x77; try_addr++) {
+-			client->addr = try_addr;
+-			ret = imx586_read_reg(imx586, IMX586_REG_ID, 2, &val);
+-			if (ret == 0) {
+-				dev_info(imx586->dev, "ACK on bus %d addr 0x%02x: reg 0x0016 = 0x%04x\n",
+-					 client->adapter->nr, try_addr, val);
+-				if (val == IMX586_ID)
+-					return 0;
+-			}
+-		}
++	dev_info(imx586->dev, "Starting sensor detection at addr 0x%02x on adapter '%s' (bus %d)...\n",
++		 client->addr, client->adapter->name, client->adapter->nr);
+ 
+-		/* Scan other adapters on system (e.g. bus 0..4) */
+-		for (bus_nr = 0; bus_nr <= 4; bus_nr++) {
+-			if (bus_nr == cur_adapter->nr)
+-				continue;
+-			test_adapter = i2c_get_adapter(bus_nr);
+-			if (!test_adapter)
+-				continue;
+-			client->adapter = test_adapter;
+-			for (try_addr = 0x08; try_addr <= 0x77; try_addr++) {
+-				client->addr = try_addr;
+-				ret = imx586_read_reg(imx586, IMX586_REG_ID, 2, &val);
+-				if (ret == 0) {
+-					dev_info(imx586->dev, "ACK on adapter %s (bus %d) addr 0x%02x: reg 0x0016 = 0x%04x\n",
+-						 test_adapter->name, bus_nr, try_addr, val);
+-					if (val == IMX586_ID) {
+-						dev_info(imx586->dev, "Found IMX586 on adapter %s (bus %d)!\n",
+-							 test_adapter->name, bus_nr);
+-						return 0;
+-					}
+-				}
+-			}
+-			client->adapter = cur_adapter;
+-			i2c_put_adapter(test_adapter);
+-		}
++	ret = imx586_read_reg(imx586, IMX586_REG_ID, 2, &val);
++	if (ret == 0 && val == IMX586_ID) {
++		dev_info(imx586->dev, "Sensor responded at addr 0x%02x (id=0x%04x, expected 0x%04x)\n",
++			 client->addr, val, IMX586_ID);
++		return 0;
+ 	}
+ 
+-	client->addr = 0x1a;
+-	dev_err(imx586->dev, "Failed to find sensor across all buses and addresses.\n");
++	dev_err(imx586->dev, "Failed to find sensor at addr 0x%02x (ret=%d, val=0x%04x)\n",
++		client->addr, ret, val);
+ 	return -ENXIO;
+ }
+ 
+@@ -1106,6 +1095,18 @@ static int imx586_parse_hw_config(struct imx586 *imx586)
+ 		return -EINVAL;
+ 	}
+ 
++	/* Also lookup mclk1 (required on Xiaomi Mi 9 / cepheus where MCLK1 is routed to pin 14) */
++	imx586->mclk1 = devm_clk_get_optional(imx586->dev, "mclk1");
++	if (!imx586->mclk1 || IS_ERR(imx586->mclk1)) {
++		imx586->mclk1 = clk_get(NULL, "cam_cc_mclk1_clk");
++		if (IS_ERR(imx586->mclk1))
++			imx586->mclk1 = NULL;
++	}
++	if (imx586->mclk1) {
++		clk_set_rate(imx586->mclk1, IMX586_INCLK_RATE);
++		dev_info(imx586->dev, "found and prepared cam_cc_mclk1_clk at 19.2MHz\n");
++	}
++
+ 	imx586->vana = devm_regulator_get(imx586->dev, "vana");
+ 	if (IS_ERR(imx586->vana))
+ 		return dev_err_probe(imx586->dev, PTR_ERR(imx586->vana),
+@@ -1194,13 +1195,18 @@ static int imx586_power_on(struct device *dev)
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct imx586 *imx586 = to_imx586(sd);
++	struct i2c_client *client = to_i2c_client(dev);
+ 	int ret;
+ 
++	/* Keep parent CCI adapter awake and powered (holds TITAN_TOP_GDSC) */
++	if (client && client->adapter && client->adapter->dev.parent)
++		pm_runtime_get_sync(client->adapter->dev.parent);
++
+ 	/* 1. VIO supply first (1.8V) */
+ 	ret = regulator_enable(imx586->vio);
+ 	if (ret) {
+ 		dev_err(dev, "failed to enable VIO (%d)\n", ret);
+-		return ret;
++		goto error_adapter;
+ 	}
+ 	usleep_range(1000, 2000);
+ 
+@@ -1234,7 +1240,9 @@ static int imx586_power_on(struct device *dev)
+ 		dev_err(imx586->dev, "failed to enable input clock (%d)\n", ret);
+ 		goto error_vdig;
+ 	}
+-	usleep_range(10000, 15000);
++	if (imx586->mclk1)
++		clk_prepare_enable(imx586->mclk1);
++	msleep(20);
+ 
+ 	/* 5. Deassert reset (logical 0 = physical HIGH for active low) */
+ 	gpiod_set_value_cansleep(imx586->reset_gpio, 0);
+@@ -1243,6 +1251,8 @@ static int imx586_power_on(struct device *dev)
+ 	return 0;
+ 
+ error_vdig:
++	if (imx586->mclk1)
++		clk_disable_unprepare(imx586->mclk1);
+ 	if (imx586->custom2_gpio)
+ 		gpiod_set_value_cansleep(imx586->custom2_gpio, 0);
+ 	if (imx586->vdig_enable_gpio)
+@@ -1256,6 +1266,11 @@ static int imx586_power_on(struct device *dev)
+ 	regulator_disable(imx586->vana);
+ error_vio:
+ 	regulator_disable(imx586->vio);
++error_adapter:
++	if (client && client->adapter && client->adapter->dev.parent) {
++		pm_runtime_mark_last_busy(client->adapter->dev.parent);
++		pm_runtime_put_autosuspend(client->adapter->dev.parent);
++	}
+ 
+ 	return ret;
+ }
+@@ -1270,12 +1285,15 @@ static int imx586_power_off(struct device *dev)
+ {
+ 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+ 	struct imx586 *imx586 = to_imx586(sd);
++	struct i2c_client *client = to_i2c_client(dev);
+ 
+ 	/* 1. Assert reset */
+ 	gpiod_set_value_cansleep(imx586->reset_gpio, 1);
+ 	usleep_range(1000, 2000);
+ 
+ 	/* 2. Disable clock */
++	if (imx586->mclk1)
++		clk_disable_unprepare(imx586->mclk1);
+ 	clk_disable_unprepare(imx586->inclk);
+ 
+ 	/* 3. Disable VDIG */
+@@ -1295,6 +1313,12 @@ static int imx586_power_off(struct device *dev)
+ 	/* 5. Disable VIO */
+ 	regulator_disable(imx586->vio);
+ 
++	/* 6. Release parent CCI adapter */
++	if (client && client->adapter && client->adapter->dev.parent) {
++		pm_runtime_mark_last_busy(client->adapter->dev.parent);
++		pm_runtime_put_autosuspend(client->adapter->dev.parent);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -1320,6 +1344,11 @@ static int imx586_init_controls(struct imx586 *imx586)
+ 	ctrl_hdlr->lock = &imx586->mutex;
+ 
+ 	/* Initialize exposure and gain */
++	{
++		static const char * const patterns[] = { "Disabled", "Color Bars" };
++		v4l2_ctrl_new_std_menu_items(ctrl_hdlr, &imx586_ctrl_ops,
++			V4L2_CID_TEST_PATTERN, 1, 0, 0, patterns);
++	}
+ 	lpfr = mode->vblank + mode->height;
+ 	imx586->exp_ctrl = v4l2_ctrl_new_std(ctrl_hdlr,
+ 					     &imx586_ctrl_ops,
+@@ -1431,10 +1460,11 @@ static int imx586_probe(struct i2c_client *client)
+ 
+ 	mutex_init(&imx586->mutex);
+ 
+-	ret = imx586_power_on(imx586->dev);
+-	if (ret) {
+-		dev_err(imx586->dev, "failed to power-on the sensor\n");
+-		goto error_mutex_destroy;
++	pm_runtime_enable(imx586->dev);
++	ret = pm_runtime_resume_and_get(imx586->dev);
++	if (ret < 0) {
++		dev_err(imx586->dev, "failed to power on sensor via runtime PM: %d\n", ret);
++		goto error_pm_disable;
+ 	}
+ 
+ 	/* Check module identity */
+@@ -1475,9 +1505,10 @@ static int imx586_probe(struct i2c_client *client)
+ 		goto error_media_entity;
+ 	}
+ 
+-	pm_runtime_set_active(imx586->dev);
+-	pm_runtime_enable(imx586->dev);
+-	pm_runtime_idle(imx586->dev);
++	pm_runtime_set_autosuspend_delay(imx586->dev, 1000);
++	pm_runtime_use_autosuspend(imx586->dev);
++	pm_runtime_mark_last_busy(imx586->dev);
++	pm_runtime_put_autosuspend(imx586->dev);
+ 
+ 	return 0;
+ 
+@@ -1486,7 +1517,9 @@ static int imx586_probe(struct i2c_client *client)
+ error_handler_free:
+ 	v4l2_ctrl_handler_free(imx586->sd.ctrl_handler);
+ error_power_off:
+-	imx586_power_off(imx586->dev);
++	pm_runtime_put_sync(imx586->dev);
++error_pm_disable:
++	pm_runtime_disable(imx586->dev);
+ error_mutex_destroy:
+ 	mutex_destroy(&imx586->mutex);
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index 0e87b28e0..1326cd51f 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -9,6 +9,7 @@
+ #include <linux/completion.h>
+ #include <linux/interrupt.h>
+ #include <linux/io.h>
++#include <linux/iopoll.h>
+ #include <linux/kernel.h>
+ #include <linux/of.h>
+ 
+@@ -47,6 +48,10 @@
+ #define		IRQ_CMD_CLEAR	0
+ #define		IRQ_CMD_SET	4
+ 
++#define CSID_CSI2_RX_RST_STROBES 0x110
++#define CSI2_RX_RST_STROBES_ALL 0x3fff
++#define CSI2_RX_IRQ_RESET_DONE BIT(27)
++
+ #define CSID_CSI2_RX_CFG0	0x100
+ #define		CSI2_RX_CFG0_NUM_ACTIVE_LANES	0
+ #define		CSI2_RX_CFG0_DL0_INPUT_SEL	4
+@@ -323,6 +328,30 @@ static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8
+ 	writel_relaxed(val, csid->base + CSID_RDI_CFG0(vc));
+ }
+ 
++/*
++ * CSID175 global reset alone can leave the C-PHY receiver byte FIFOs out of
++ * alignment. Reset the receiver after programming the PHY selection and lane
++ * count, before resuming RDI and before the sensor starts transmitting.
++ * Register layout and reset mask: Xiaomi cepheus-p-oss cam_ife_csid175.h.
++ */
++static void csid_reset_cphy_rx_8150(struct csid_device *csid)
++{
++	u32 status;
++	int ret;
++
++	writel(CSI2_RX_IRQ_RESET_DONE, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++	writel(CSI2_RX_RST_STROBES_ALL, csid->base + CSID_CSI2_RX_RST_STROBES);
++	ret = readl_poll_timeout(csid->base + CSID_CSI2_RX_IRQ_STATUS,
++				 status, status & CSI2_RX_IRQ_RESET_DONE,
++				 100, 100000);
++	if (ret)
++		dev_err(csid->camss->dev, "CSID%u C-PHY RX reset timeout (%08x)\n",
++			csid->id, status);
++	writel(CSI2_RX_IRQ_RESET_DONE, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++}
++
+ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ {
+ 	struct csid_testgen_config *tg = &csid->testgen;
+@@ -335,6 +364,9 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 
+ 			__csid_configure_rdi_stream(csid, enable, i);
+ 			__csid_configure_rx(csid, &csid->phy, i);
++			if (enable && csid->phy.is_cphy &&
++			    csid->camss->res->version == CAMSS_8150)
++				csid_reset_cphy_rx_8150(csid);
+ 			__csid_ctrl_rdi(csid, enable, i);
+ 		}
+ }
+@@ -390,11 +422,72 @@ static irqreturn_t csid_isr(int irq, void *dev)
+  *
+  * Return 0 on success or a negative error code otherwise
+  */
++/*
++ * SM8150/CSID175 requires the downstream global-reset preparation: keep
++ * receiver clocks active, prepare every data path, then reset hardware and
++ * software registers separately. Poll RESET_DONE with the top IRQ masked;
++ * a zero reset-strobe value is not evidence that reset has completed.
++ * See Xiaomi cepheus-p-oss cam_ife_csid_global_reset().
++ */
++static int csid_reset_8150(struct csid_device *csid)
++{
++	u32 status;
++	unsigned int i;
++	int ret;
++
++	writel(0, csid->base + CSID_TOP_IRQ_MASK);
++	writel(0, csid->base + CSID_CSI2_RX_IRQ_MASK);
++	writel(0, csid->base + 0x34); /* IPP IRQ mask */
++	writel(0, csid->base + 0xa4); /* PPP IRQ mask */
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(0x0fffffff, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	writel(0x7fff, csid->base + 0x38); /* IPP IRQ clear */
++	writel(0xffff, csid->base + 0xa8); /* PPP IRQ clear */
++	for (i = 0; i < 3; i++) {
++		writel(0, csid->base + CSID_CSI2_RDIN_IRQ_MASK(i));
++		writel(0x7fff, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
++	}
++	writel(1, csid->base + CSID_IRQ_CMD);
++
++	writel(BIT(CSI2_RX_CFG1_CGC_MODE), csid->base + CSID_CSI2_RX_CFG1);
++	writel(1, csid->base + 0x200); /* IPP CFG0 */
++	writel(1, csid->base + 0x700); /* PPP CFG0 */
++	for (i = 0; i < 3; i++)
++		writel(2, csid->base + CSID_RDI_CFG0(i));
++
++	writel(0x1e, csid->base + CSID_RST_STROBES);
++	ret = readl_poll_timeout(csid->base + CSID_TOP_IRQ_STATUS,
++				 status, status & BIT(TOP_IRQ_STATUS_RESET_DONE),
++				 100, 100000);
++	if (ret) {
++		dev_err(csid->camss->dev, "CSID%u hardware reset timeout (%08x)\n",
++			csid->id, status);
++		return ret;
++	}
++
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++	writel(1, csid->base + CSID_RST_STROBES);
++	ret = readl_poll_timeout(csid->base + CSID_TOP_IRQ_STATUS,
++				 status, status & BIT(TOP_IRQ_STATUS_RESET_DONE),
++				 100, 100000);
++	if (ret)
++		dev_err(csid->camss->dev, "CSID%u software reset timeout (%08x)\n",
++			csid->id, status);
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++	writel(1, csid->base + CSID_TOP_IRQ_MASK);
++	return ret;
++}
++
+ static int csid_reset(struct csid_device *csid)
+ {
+ 	unsigned long time;
+ 	u32 val;
+ 
++	if (csid->camss->res->version == CAMSS_8150)
++		return csid_reset_8150(csid);
++
+ 	reinit_completion(&csid->reset_complete);
+ 
+ 	writel_relaxed(1, csid->base + CSID_TOP_IRQ_CLEAR);
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 9cbeb287e..475ba4793 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1336,11 +1336,12 @@ static const struct camss_subdev_resources vfe_res_8150[] = {
+ 	/* VFE0 */
+ 	{
+ 		.regulators = {},
+-		.clock = { "camnoc_axi", "cpas_ahb", "slow_ahb_src",
++		.clock = { "camnoc_axi", "cpas_ahb", "gcc_camera_axi", "slow_ahb_src",
+ 				"soc_ahb", "vfe0", "vfe0_axi",
+ 				"vfe0_src", "csi0",
+ 				"csi0_src" },
+ 		.clock_rate = { { 0 },
++				{ 0 },
+ 				{ 0 },
+ 				{ 80000000 },
+ 				{ 0 },
+@@ -1364,11 +1365,12 @@ static const struct camss_subdev_resources vfe_res_8150[] = {
+ 	/* VFE1 */
+ 	{
+ 		.regulators = {},
+-		.clock = { "camnoc_axi", "cpas_ahb", "slow_ahb_src",
++		.clock = { "camnoc_axi", "cpas_ahb", "gcc_camera_axi", "slow_ahb_src",
+ 				"soc_ahb", "vfe1", "vfe1_axi",
+ 				"vfe1_src", "csi1",
+ 				"csi1_src" },
+ 		.clock_rate = { { 0 },
++				{ 0 },
+ 				{ 0 },
+ 				{ 80000000 },
+ 				{ 0 },
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+index 6f78f1752..077c77364 100644
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -716,6 +716,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.dev_id = 0,
+ 		.bus = ATH10K_BUS_SNOC,
+ 		.name = "wcn3990 hw1.0",
++		.no_pairwise_key_del_ind = true,
+ 		.led_pin = 0,
+ 		.continuous_frag_desc = true,
+ 		.tx_chain_mask = 0x7,
+diff --git a/drivers/net/wireless/ath/ath10k/debug.c b/drivers/net/wireless/ath/ath10k/debug.c
+index b75202204..951b05fb0 100644
+--- a/drivers/net/wireless/ath/ath10k/debug.c
++++ b/drivers/net/wireless/ath/ath10k/debug.c
+@@ -2171,6 +2171,13 @@ static ssize_t ath10k_debug_fw_checksums_read(struct file *file,
+ 
+ 	mutex_lock(&ar->conf_mutex);
+ 
++	/* SNOC/non-BMI firmware may be loaded remotely, without host blobs. */
++	if (!ar->normal_mode_fw.fw_file.firmware ||
++	    !ar->normal_mode_fw.board) {
++		ret_cnt = -EOPNOTSUPP;
++		goto out_unlock;
++	}
++
+ 	len += scnprintf(buf + len, buf_len - len,
+ 			 "firmware-N.bin\t\t%08x\n",
+ 			 crc32_le(0, ar->normal_mode_fw.fw_file.firmware->data,
+@@ -2198,6 +2205,7 @@ static ssize_t ath10k_debug_fw_checksums_read(struct file *file,
+ 
+ 	ret_cnt = simple_read_from_buffer(user_buf, count, ppos, buf, len);
+ 
++out_unlock:
+ 	mutex_unlock(&ar->conf_mutex);
+ 
+ 	kfree(buf);
+diff --git a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/net/wireless/ath/ath10k/hw.h
+index da71dce9b..31c0a098d 100644
+--- a/drivers/net/wireless/ath/ath10k/hw.h
++++ b/drivers/net/wireless/ath/ath10k/hw.h
+@@ -638,6 +638,9 @@ struct ath10k_hw_params {
+ 
+ 	/* The hardware support multicast frame registrations */
+ 	bool mcast_frame_registration;
++
++	/* WCN3990 does not acknowledge pairwise key removal over HTT. */
++	bool no_pairwise_key_del_ind;
+ };
+ 
+ struct htt_resp;
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+index 24dd794e3..3ed4488a3 100644
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -10,6 +10,7 @@
+ #include "mac.h"
+ 
+ #include <linux/export.h>
++#include <linux/moduleparam.h>
+ #include <net/cfg80211.h>
+ #include <net/mac80211.h>
+ #include <linux/etherdevice.h>
+@@ -29,6 +30,17 @@
+ #include "wow.h"
+ #include "leds.h"
+ 
++/* Optional workaround for WCN3990 firmware with broken active 5 GHz scans.
++ * Keep other devices and firmware on the normal path unless explicitly enabled.
++ */
++static bool wcn3990_passive_scan;
++module_param(wcn3990_passive_scan, bool, 0444);
++MODULE_PARM_DESC(wcn3990_passive_scan, "Passive 5 GHz scans on WCN3990");
++
++static bool wcn3990_vht80;
++module_param(wcn3990_vht80, bool, 0444);
++MODULE_PARM_DESC(wcn3990_vht80, "Limit WCN3990 VHT bandwidth to 80 MHz");
++
+ /*********/
+ /* Rates */
+ /*********/
+@@ -317,6 +329,14 @@ static int ath10k_install_key(struct ath10k_vif *arvif,
+ 	if (ret)
+ 		return ret;
+ 
++	/* WCN3990 sends no security indication for a pairwise key deletion.
++	 * Keep waiting for installations and group-key changes: those do
++	 * generate indications and must retain their timeout protection.
++	 */
++	if (cmd == DISABLE_KEY && !(flags & WMI_KEY_GROUP) &&
++	    ar->hw_params.no_pairwise_key_del_ind)
++		return 0;
++
+ 	time_left = wait_for_completion_timeout(&ar->install_key_done, 3 * HZ);
+ 	if (time_left == 0)
+ 		return -ETIMEDOUT;
+@@ -3441,6 +3461,10 @@ static int ath10k_update_channel_list(struct ath10k *ar)
+ 			passive = channel->flags & IEEE80211_CHAN_NO_IR;
+ 			ch->passive = passive;
+ 
++			if (wcn3990_passive_scan && QCA_REV_WCN3990(ar) &&
++			    band == NL80211_BAND_5GHZ)
++				ch->passive = true;
++
+ 			/* the firmware is ignoring the "radar" flag of the
+ 			 * channel and is scanning actively using Probe Requests
+ 			 * on "Radar detection"/DFS channels which are not
+@@ -4894,6 +4918,11 @@ static struct ieee80211_sta_vht_cap ath10k_create_vht_cap(struct ath10k *ar)
+ 	vht_cap.vht_supported = 1;
+ 	vht_cap.cap = ar->vht_cap_info;
+ 
++	/* Some firmware advertises wide-channel modes it cannot operate. */
++	if (wcn3990_vht80 && QCA_REV_WCN3990(ar))
++		vht_cap.cap &= ~(IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK |
++				 IEEE80211_VHT_CAP_SHORT_GI_160);
++
+ 	if (ar->vht_cap_info & (IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE |
+ 				IEEE80211_VHT_CAP_MU_BEAMFORMEE_CAPABLE)) {
+ 		val = ath10k_mac_get_vht_cap_bf_sts(ar);

@@ -1,0 +1,33 @@
+{
+  "artifacts": {
+    "boot-original-reference": {
+      "bytes": 25145344,
+      "sha256": "74653da854b14450e199091e396c7a02cc6e8b09720c7e8d818fd92fd5bae07f"
+    },
+    "camss-v3": {
+      "bytes": 1716640,
+      "sha256": "d997de3ba47d155e1c9e340e155c2d526e96f624c4842cf2377304d3f85cc96b"
+    },
+    "fastrpc-sensors": {
+      "bytes": 241576,
+      "sha256": "948555b8e945b0ae9c1d155ee924896b9ee042b491f3f2c595e8486aa210ccc6"
+    },
+    "slpi-module": {
+      "bytes": 40888,
+      "sha256": "0f1f22e372dfc9e87429c6295bfa35663eb70a5f9d4a2b580c4885b91c6099c0"
+    },
+    "kernel-Image": {
+      "bytes": 32557568,
+      "sha256": "b7b92e2053c3c782d70a5ce7f1848015c826a62b3db6ff42beae102577844421"
+    },
+    "kernel-Image.gz": {
+      "bytes": 12956799,
+      "sha256": "71bd7461194398b0192dba4d7836154ece89be606dea68849746d61476b9e506"
+    }
+  },
+  "boot_and_ramdisk_withheld": true,
+  "reason": "Original boot includes a device-specific command line/ramdisk; reference hash only, never publish the original boot dump.",
+  "known_boot_header_identifiers_absent_from_clean_kernel": true,
+  "config_has_no_embedded_firmware": true,
+  "source_binary_matching_level": "Expected hashes and retained build provenance verified; no clean-room byte-for-byte full rebuild claimed."
+}

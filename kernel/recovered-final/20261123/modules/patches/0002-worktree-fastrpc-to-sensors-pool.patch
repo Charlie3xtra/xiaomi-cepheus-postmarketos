@@ -1,0 +1,58 @@
+diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
+--- a/drivers/misc/fastrpc.c
++++ b/drivers/misc/fastrpc.c
+@@ -264,6 +264,7 @@
+ 	int domain_id;
+ 	int sesscount;
+ 	int vmcount;
++	bool cepheus_sensor_pool_ready;
+ 	struct qcom_scm_vmperm vmperms[FASTRPC_MAX_VMIDS];
+ 	struct rpmsg_device *rpdev;
+ 	struct fastrpc_session_ctx session[FASTRPC_MAX_SESSIONS];
+@@ -954,10 +955,20 @@
+ 
+ 	ctx->msg_sz = pkt_size;
+ 
+-	if (ctx->fl->sctx->sid)
++	/* The cepheus sensors PD expects physical addresses, without the SID tag.
++	 * Never use this path until a dedicated pool has been assigned to the DSP.
++	 */
++	if (ctx->fl->pd == SENSORS_PD &&
++	    ctx->fl->cctx->domain_id == SDSP_DOMAIN_ID &&
++	    of_machine_is_compatible("xiaomi,cepheus")) {
++		if (!ctx->fl->cctx->cepheus_sensor_pool_ready)
++			return -ENXIO;
++		err = fastrpc_remote_heap_alloc(ctx->fl, dev, pkt_size, &ctx->buf);
++	} else if (ctx->fl->sctx->sid) {
+ 		err = fastrpc_buf_alloc(ctx->fl, dev, pkt_size, &ctx->buf);
+-	else
++	} else {
+ 		err = fastrpc_remote_heap_alloc(ctx->fl, dev, pkt_size, &ctx->buf);
++	}
+ 	if (err)
+ 		return err;
+ 
+@@ -2312,8 +2323,21 @@
+ 		if (!err) {
+ 			src_perms = BIT(QCOM_SCM_VMID_HLOS);
+ 
+-			qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
+-				    data->vmperms, data->vmcount);
++			if (of_machine_is_compatible("xiaomi,cepheus") && !data->vmcount) {
++				err = -EINVAL;
++				goto err_free_data;
++			}
++			err = qcom_scm_assign_mem(res.start, resource_size(&res), &src_perms,
++					  data->vmperms, data->vmcount);
++			if (of_machine_is_compatible("xiaomi,cepheus")) {
++				if (err) {
++					dev_err(rdev, "sensor heap assignment failed: %d\n", err);
++					goto err_free_data;
++				}
++				data->cepheus_sensor_pool_ready = true;
++				dev_info(rdev, "cepheus sensor heap assigned: %pa size=%llu\n",
++					 &res.start, (unsigned long long)resource_size(&res));
++			}
+ 		}
+ 
+ 	}

@@ -1,0 +1,430 @@
+{
+  ".gitignore": {
+    "bytes": 105,
+    "sha256": "d19aa4727aa83660557ccea7c6893be66bc2aabf3a780dbd01e10414e35ebb35"
+  },
+  "attribution/0001-drm-msm-fix-imported-dmabuf-free.patch": {
+    "bytes": 3837,
+    "sha256": "80860dbe0290f2378ec5b41932b9538dadf1a17e2865d6d286f82161706ea9d0"
+  },
+  "ATTRIBUTION.md": {
+    "bytes": 1847,
+    "sha256": "e4aa76afb3b666d5ba1efaf9024046fb62cfc318f6cc8e9b60b32ebe8ea2287b"
+  },
+  "COPYING": {
+    "bytes": 496,
+    "sha256": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0"
+  },
+  "dt/peripheral-nodes.json": {
+    "bytes": 1307,
+    "sha256": "40b1bee34a1d9e2fce8aa3c3d07fc16fd9737886fe41f556062849850becb16f"
+  },
+  "dt/provenance.json": {
+    "bytes": 179,
+    "sha256": "875cf1590712e447152d5480902ca8e4728f72ebed21d63775b54995d7353544"
+  },
+  "dt/sm8150-cepheus-final-static.dts": {
+    "bytes": 145174,
+    "sha256": "7b7776318f2f78460c615356a767bac155f4572cf1e7289544326bfd465c689f"
+  },
+  "kernel/config-image8.aarch64": {
+    "bytes": 244577,
+    "sha256": "a823dbb4b67d87fc4dff4fa4b479c00cf2b7d83bb40592e87fe4e42570b848dc"
+  },
+  "kernel/patches/0001-archive-root-to-local-head.patch": {
+    "bytes": 92009,
+    "sha256": "a197344c739d84322ca07978526859181d1f42f2462f121fe29ec2c2323353b5"
+  },
+  "kernel/patches/0002-local-head-to-image8-worktree.patch": {
+    "bytes": 22854,
+    "sha256": "36f95001da105b00a784198f999350d12929af24880950cd216e93821882eea9"
+  },
+  "kernel/patches/series": {
+    "bytes": 79,
+    "sha256": "f43d01dc41637bd26474a11b148b30850d4ad91280a221d8b8dd83395e8397af"
+  },
+  "LICENSES/deprecated/0BSD": {
+    "bytes": 983,
+    "sha256": "6b50bcee8c2f90c73558dee62e444dde54f3cea86ccfcea84aa8be60005e67b4"
+  },
+  "LICENSES/deprecated/CC0-1.0": {
+    "bytes": 7386,
+    "sha256": "c8a97e7369419869e2d60eab21a9f13bf293bfc33aed0de3c459644a8edd0c80"
+  },
+  "LICENSES/deprecated/GFDL-1.1": {
+    "bytes": 19177,
+    "sha256": "8f13a0664b7e0f30d7a9001f3ecd87d3dea7964559d08337ca1a4b129d9e0e0d"
+  },
+  "LICENSES/deprecated/GFDL-1.2": {
+    "bytes": 21352,
+    "sha256": "e43e6da62a83b8bf96819ff1226151da373cb87f165cd538f405978a0a8c6b7a"
+  },
+  "LICENSES/deprecated/GPL-1.0": {
+    "bytes": 12951,
+    "sha256": "e72efc63ce52380f374733ec7a733f5c11efa3c1f2b0cb48a9c355868ee5b09c"
+  },
+  "LICENSES/deprecated/ISC": {
+    "bytes": 1046,
+    "sha256": "cbdf535b99a9f4cb208c5495c6dd9a1f84104d83c03f8f0d98ee7a0c43805388"
+  },
+  "LICENSES/deprecated/Linux-OpenIB": {
+    "bytes": 1317,
+    "sha256": "8ae20d34c2a74c85ae2760dd0034baf18e44bee3289b9b3a4fe46768b4ea2cd6"
+  },
+  "LICENSES/deprecated/X11": {
+    "bytes": 1625,
+    "sha256": "21115f2385035c1ceeda8820b7f050c89a30418457a5e2a5c6091f2545d40e44"
+  },
+  "LICENSES/deprecated/Zlib": {
+    "bytes": 1165,
+    "sha256": "3b42160485d3d596ff8a4956958c4360dc55f1e2414c964aef0ad2d3c2a92abb"
+  },
+  "LICENSES/dual/Apache-2.0": {
+    "bytes": 10045,
+    "sha256": "7e4d3fba250d15e9e0afa380d4b611828fa2560cc8fdebe95bcf2f01a487de12"
+  },
+  "LICENSES/dual/CC-BY-4.0": {
+    "bytes": 19355,
+    "sha256": "84d5ad08940d29065d8a6f062effa4204c2235c9f2487aa53748ed0a0a6cce86"
+  },
+  "LICENSES/dual/CDDL-1.0": {
+    "bytes": 19511,
+    "sha256": "490abf7869e4638fbb43df99a20e5683224617a6bf9ffd06971cb02b153e53c1"
+  },
+  "LICENSES/dual/copyleft-next-0.3.1": {
+    "bytes": 11429,
+    "sha256": "28386705873e5eacf16b5d34dd06e58737a2c5a3622acda380a0f236c0a6d02a"
+  },
+  "LICENSES/dual/MPL-1.1": {
+    "bytes": 26321,
+    "sha256": "ccbda1d2f0cfef821f39e1880aae9213c7933e07713ee638ad1fb02547c0b97b"
+  },
+  "LICENSES/exceptions/GCC-exception-2.0": {
+    "bytes": 997,
+    "sha256": "0dca50b78073055447d02e8f6ae4fa94c1d0e6d7fbb4c874c9db5eb960c8b3d4"
+  },
+  "LICENSES/exceptions/Linux-syscall-note": {
+    "bytes": 1258,
+    "sha256": "8e378ab93586eb55135d3bc119cce787f7324f48394777d00c34fa3d0be3303f"
+  },
+  "LICENSES/preferred/BSD-2-Clause": {
+    "bytes": 1641,
+    "sha256": "6313108c23efffa36948f8b2cff1560a5935373b527b0e1a837cc77e6ed1bacd"
+  },
+  "LICENSES/preferred/BSD-3-Clause": {
+    "bytes": 1845,
+    "sha256": "7a83b1aeb460458db9a4bd521d7f237c45b1650f6e60ea5ffc71e49472454de3"
+  },
+  "LICENSES/preferred/BSD-3-Clause-Clear": {
+    "bytes": 2035,
+    "sha256": "3f8a01d020e77c045e364c4681ee78c591041b7a38aa61972f689f4bc4cb5088"
+  },
+  "LICENSES/preferred/GPL-2.0": {
+    "bytes": 18600,
+    "sha256": "8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa"
+  },
+  "LICENSES/preferred/LGPL-2.0": {
+    "bytes": 26144,
+    "sha256": "967792c8a6a57bbbc123a69fff6c3020af80b04623916b82ba721b0347e64433"
+  },
+  "LICENSES/preferred/LGPL-2.1": {
+    "bytes": 27391,
+    "sha256": "b5b8b75228bc1de1cca15cf00f90229e936d9712c62df52b057fffad21ffec48"
+  },
+  "LICENSES/preferred/MIT": {
+    "bytes": 1372,
+    "sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f"
+  },
+  "modules/camera-nominal-vote/cepheus-camera-power": {
+    "bytes": 914,
+    "sha256": "b271fdc1af3136ce1528114de4813abfee706bfa2eb5ac286ac4c9aa845544a8"
+  },
+  "modules/camera-nominal-vote/cepheus-camera-power.service": {
+    "bytes": 278,
+    "sha256": "a90ef6152ff14d0e3a5939471fc971043dfa543fdabfb484e3c47972b53aca4f"
+  },
+  "modules/camera-nominal-vote/cepheus_camera_nominal.c": {
+    "bytes": 2164,
+    "sha256": "39e961d5aff718724553ab5557e51c664ece1d79c0650b0e3993e2cbab88cdc9"
+  },
+  "modules/camera-nominal-vote/Makefile": {
+    "bytes": 34,
+    "sha256": "a8659d58284af11a998191906742ebc7ca75570f079f4b4ec803c204cc367f3c"
+  },
+  "modules/camss-v3/camss-csid-4-1.c": {
+    "bytes": 5618,
+    "sha256": "12e2907fbc8aa5e09670e2169ac93cd103795d07dfad9be3c00598ad91420f64"
+  },
+  "modules/camss-v3/camss-csid-4-7.c": {
+    "bytes": 6380,
+    "sha256": "de87454462a015d7a01a2d29f63da4793f5953d62c2038f446b66e7149c31973"
+  },
+  "modules/camss-v3/camss-csid-680.c": {
+    "bytes": 13649,
+    "sha256": "f97cd77fc7707d19bf2d0ee0ecb5b636d2e6c71c34b2c646869e7ee63e74bebe"
+  },
+  "modules/camss-v3/camss-csid-780.c": {
+    "bytes": 9217,
+    "sha256": "bea7d9daaf34384523aea1e17dac81ca5d2b762db21a39b7b0fa3520099a77a0"
+  },
+  "modules/camss-v3/camss-csid-780.h": {
+    "bytes": 892,
+    "sha256": "ec60b01f48ca41a1fee780560d321fa8fcb79cd5d3986195dc30fc1d50d95336"
+  },
+  "modules/camss-v3/camss-csid-gen1.h": {
+    "bytes": 908,
+    "sha256": "973bb1c556229fa190dcdb9e77cdc98fae3b964df3bb97af650fc0c0c4392d7f"
+  },
+  "modules/camss-v3/camss-csid-gen2.c": {
+    "bytes": 17538,
+    "sha256": "0dd0cfcc176eff77984970b106ce437fd0125a1fdfb849539d117d084277b6ae"
+  },
+  "modules/camss-v3/camss-csid-gen2.h": {
+    "bytes": 1375,
+    "sha256": "aa06ec13ac34c76ee71f646dea5b3e7fc98d6d3fc6e19b137eacb1ee37ad6a49"
+  },
+  "modules/camss-v3/camss-csid.c": {
+    "bytes": 31836,
+    "sha256": "f063e583b44276c7ecb1d8452003f88078273548efb66d7960c4997147dbe2b7"
+  },
+  "modules/camss-v3/camss-csid.h": {
+    "bytes": 6928,
+    "sha256": "282c2b89f3951d96d434e90857e8ea3380c926f86b35970953f2a6d0c05f588c"
+  },
+  "modules/camss-v3/camss-csiphy-2ph-1-0.c": {
+    "bytes": 5208,
+    "sha256": "370181d484c6284820e867089b72ec4e2e7d21becce512cbf0902db9f1e8080f"
+  },
+  "modules/camss-v3/camss-csiphy-3ph-1-0.c": {
+    "bytes": 39854,
+    "sha256": "4b4819367b17be474435ba04f3a4cbac9cc226d3cd0c41f1da77047eb237609b"
+  },
+  "modules/camss-v3/camss-csiphy.c": {
+    "bytes": 21753,
+    "sha256": "cbbc9a5530c6b55826321e50ca883411ac902976a4d69b2b93424f290c526c6b"
+  },
+  "modules/camss-v3/camss-csiphy.h": {
+    "bytes": 3375,
+    "sha256": "4f9b5667ecdfc74c2e4334702ce15e69a773beecab589831150442584933f8f8"
+  },
+  "modules/camss-v3/camss-format.c": {
+    "bytes": 2066,
+    "sha256": "d15ce8943d7ba0caf489e7ced1157176ee2a96b54ddfef2ca12de4e58803fa43"
+  },
+  "modules/camss-v3/camss-format.h": {
+    "bytes": 1985,
+    "sha256": "03a5b83db5676251e60c3e5d22a2c92817ddeb2ca9ec6a56a237542529a37a7b"
+  },
+  "modules/camss-v3/camss-ispif.c": {
+    "bytes": 39364,
+    "sha256": "b021f166aad817ec85109749ef53732d88e734abd777913d011a4b7a333a8240"
+  },
+  "modules/camss-v3/camss-ispif.h": {
+    "bytes": 1718,
+    "sha256": "36045eece5c4b3e98a35a68fcfed569d588b52a0b80bd80439245ba6e1906842"
+  },
+  "modules/camss-v3/camss-vfe-17x.c": {
+    "bytes": 19173,
+    "sha256": "058bcf4381a23c644e1383b274b4977c75a024e9081d8762188021ebcc91be68"
+  },
+  "modules/camss-v3/camss-vfe-4-1.c": {
+    "bytes": 31048,
+    "sha256": "1db59e77f974939d461d7f0b5dbb5d0a40a1b86e0335a9c9a8da059451c50f4f"
+  },
+  "modules/camss-v3/camss-vfe-4-7.c": {
+    "bytes": 36279,
+    "sha256": "50f4f0eecbab9b9b1359bd35bcf574ce5ece9b0e5d01103d924681cfaa7b3e58"
+  },
+  "modules/camss-v3/camss-vfe-4-8.c": {
+    "bytes": 36175,
+    "sha256": "d95684c0f18b53ec0d7385fd0a62d5757db1d02cd7bcddcf9ee7e9b8ef7b1eb1"
+  },
+  "modules/camss-v3/camss-vfe-480.c": {
+    "bytes": 9434,
+    "sha256": "4f5c82b94f6b4d3a899df007e291c72bb23f44a0e76fbd3c4769e94c01589e90"
+  },
+  "modules/camss-v3/camss-vfe-680.c": {
+    "bytes": 7846,
+    "sha256": "c5e1b8b57c0aca5cf2d0d92bbd47cf9513f4aac70bb3385f4c7c2e7d8c414375"
+  },
+  "modules/camss-v3/camss-vfe-780.c": {
+    "bytes": 4737,
+    "sha256": "638af7f83ff5665fb73ddc9fc819629a252bdab6faab8b9de5179c8e84f2961b"
+  },
+  "modules/camss-v3/camss-vfe-gen1.c": {
+    "bytes": 18692,
+    "sha256": "4ea6d35ea13ef50cc25b5bdc00ecb92361bc8b69da5828186989368d442f22ba"
+  },
+  "modules/camss-v3/camss-vfe-gen1.h": {
+    "bytes": 3927,
+    "sha256": "ca014d421ab7d93ceb01005d415953c65bc483f9991937d9a5681a92cc3cb8a8"
+  },
+  "modules/camss-v3/camss-vfe.c": {
+    "bytes": 54878,
+    "sha256": "bfbddc0d87ac53164c3428a018b2730aef40d6021e85df315b622f8f4ffd45c2"
+  },
+  "modules/camss-v3/camss-vfe.h": {
+    "bytes": 8345,
+    "sha256": "bef6a0fce7dfae7da623d89fc89deea78cd4ed97230fe2aa2e8f63538f5794b5"
+  },
+  "modules/camss-v3/camss-video.c": {
+    "bytes": 20418,
+    "sha256": "0a37559ee3cf17fcc899f49296bf67e300d774e5d46ebf6b2c2130678b1125be"
+  },
+  "modules/camss-v3/camss-video.h": {
+    "bytes": 1444,
+    "sha256": "41486e598a4cf33fb7340810767b065cf4d31ba2d2f105462adbe83b54b5675f"
+  },
+  "modules/camss-v3/camss.c": {
+    "bytes": 100439,
+    "sha256": "e1e8748548b5263fd2f2f01420e4ce989f026d3ab6d196b54a17114bdbad2b13"
+  },
+  "modules/camss-v3/camss.h": {
+    "bytes": 4305,
+    "sha256": "7f78e21fa7d78da9a36e2ed75072d5f9350fb988a2b67882beb8d8eea04f8aa4"
+  },
+  "modules/camss-v3/Kconfig": {
+    "bytes": 282,
+    "sha256": "791a5ba476d8f423bcba4e9bfb3dcb3d41c13a04dd734cd9435b28694921d9d6"
+  },
+  "modules/camss-v3/Makefile": {
+    "bytes": 587,
+    "sha256": "20576f24d0cdd7a19c32b8accb94ab3317930d9d8b05dfe54ea5a8b084fa2bf2"
+  },
+  "modules/fastrpc-sensors/fastrpc.c": {
+    "bytes": 61929,
+    "sha256": "f8ba44fd3ddd4efa2eb1c28520e3c98d331efc86ae27430871af95fb983d97d8"
+  },
+  "modules/fastrpc-sensors/Makefile": {
+    "bytes": 19,
+    "sha256": "e968891252a2d22549467415cc84fa264c31cd73fa22e541bdfb562b512b2d55"
+  },
+  "modules/patches/0001-worktree-camss-to-final-v3.patch": {
+    "bytes": 6740,
+    "sha256": "4a19f76133e5f943ffabe5baf8775945f0cd5cc9c7e58dfeedd9979b70305b66"
+  },
+  "modules/patches/0002-worktree-fastrpc-to-sensors-pool.patch": {
+    "bytes": 1887,
+    "sha256": "b64187e91d025df00131e9cc1ac860a9b41c4e0a46a156885d5dfa866850f044"
+  },
+  "modules/slpi-enable/99-cepheus-sensors.rules": {
+    "bytes": 172,
+    "sha256": "cebe25f77e264cbfbbef9be6730702f056027885ca50f3b35ab596ca3aa5f33f"
+  },
+  "modules/slpi-enable/cepheus-sensors-start": {
+    "bytes": 1520,
+    "sha256": "caf9fef391bbf0b46e92d1e1e36baa8b0a38b6ecd3e64cd7083296c84580dfd3"
+  },
+  "modules/slpi-enable/cepheus-sensors.service": {
+    "bytes": 383,
+    "sha256": "035bd280191ba4a3521f72c4241b9a1cc52564b891b9f44cad23f4f6759286eb"
+  },
+  "modules/slpi-enable/cepheus-slpi.dts": {
+    "bytes": 207,
+    "sha256": "b09aea58a688fdd7ee759d3a410caa5250dd4bb908d3a98f3da7a9148beab130"
+  },
+  "modules/slpi-enable/cepheus-ssc-pool.dts": {
+    "bytes": 670,
+    "sha256": "676212da75f914ba32a57936a7206e2ff973a25dbf752ba04e5ddb6045a2bb66"
+  },
+  "modules/slpi-enable/cepheus_slpi.c": {
+    "bytes": 1322,
+    "sha256": "ab1171318b3f5228a36c3773e3eed92ba522f055b2f8f5b327461a9f7b91a312"
+  },
+  "modules/slpi-enable/embed.py": {
+    "bytes": 241,
+    "sha256": "b80cf234ec2f278c76cf4ff25f441d17a2efc0eaf128aa4ce44eaa029dbf6567"
+  },
+  "modules/slpi-enable/Makefile": {
+    "bytes": 24,
+    "sha256": "338a8ac3c20ec5dd30cf68ca6c4e4061aec530ececfcdab05bcc8ba9abef8940"
+  },
+  "packaging/historical-device-xiaomi-cepheus/APKBUILD": {
+    "bytes": 820,
+    "sha256": "f23cefe4d42fb3d124ce3cdaeab05248a27ad24c9525f4b94e54f0d5841036b0"
+  },
+  "packaging/historical-device-xiaomi-cepheus/deviceinfo": {
+    "bytes": 1077,
+    "sha256": "24171b98a8c413bf5e636c375f6032e210d95536373ad43e0ca4955211f7e06c"
+  },
+  "packaging/historical-device-xiaomi-cepheus/kernel-cmdline.conf": {
+    "bytes": 47,
+    "sha256": "e9ee12f919b478628812bb7d3bef867f522f2de773cef4b686bdb07eec47ae95"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/0001-lid-switch-fix.patch": {
+    "bytes": 435,
+    "sha256": "5186b5bbd1fae18c554d5ac2a9f6675906dac10bbe806add3f84841a8ef9b1d9"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/0002-enable-ufs.patch": {
+    "bytes": 903,
+    "sha256": "bef9bd0cc54b925a20cd626c9de230d9d703509a386de968b958df6c14ee9429"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/0003-fix-llvm-build.patch": {
+    "bytes": 1186,
+    "sha256": "9c81693027b4ff7962f67d4455747920abe4c37b9ef5fec9fbf05754744f1859"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/0004-add-camera-support-and-cepheus-imx586.patch": {
+    "bytes": 90239,
+    "sha256": "bd41c1f238b36e36057242895dd0d2cafc5ddca69be2b091346dd064fdd7c10b"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/APKBUILD": {
+    "bytes": 2989,
+    "sha256": "02305f361b54697f912de742e607d7404e0c8cf43b0197d8442b8d554b5f58e7"
+  },
+  "packaging/historical-linux-postmarketos-qcom-sm8150/config-postmarketos-qcom-sm8150.aarch64": {
+    "bytes": 244909,
+    "sha256": "518e3c5f83f7b99701558b8d04bfeecd91568192f2178eda526820fb39434f6e"
+  },
+  "packaging/pmaports.json": {
+    "bytes": 441,
+    "sha256": "a46d8c8b950229c89e8a030e2908f28283e117b6c47a438f804ed27f403b7f19"
+  },
+  "packaging/source-checks.json": {
+    "bytes": 2306,
+    "sha256": "1071b3661df5ba7703a5efacbcd39139aa95ff41ce0e72d17107ea6ca1d9885a"
+  },
+  "provenance/kernel-git.json": {
+    "bytes": 2777,
+    "sha256": "478e5c8721243038fe2334e8f4fe023e99202fed4278c8665a5d51000671bb63"
+  },
+  "provenance/kernel-untracked.txt": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "provenance/reconstruction-verification.json": {
+    "bytes": 573,
+    "sha256": "2c5302e920e82d374ea07c73f6b6371f902ef7fe46ea3ebf38d18c0ea3bed236"
+  },
+  "provenance/reference-binary-fingerprints.json": {
+    "bytes": 1278,
+    "sha256": "f70fdfd780a4da44b3db138dad60dec4e84afb1ddff128ac1f5fa738e06b0918"
+  },
+  "provenance/toolchain.json": {
+    "bytes": 404,
+    "sha256": "85a243d74fd32996dd5dc0008ade2e8ddd03883b1b04701692de76a7697f6af1"
+  },
+  "provenance/upstream-archive-check.json": {
+    "bytes": 190,
+    "sha256": "54db66ae83c7c95eb6bb36e2dd2d9db5dc0e04c9ee7661fc9963031ecb406a06"
+  },
+  "README.md": {
+    "bytes": 10352,
+    "sha256": "8cb928e23551575440f21149ecd1b8900e854ef5d75012286bee1d05123c46ac"
+  },
+  "scripts/embed-overlay.py": {
+    "bytes": 336,
+    "sha256": "40677cd5ef160ecbbea566fa1489153a4c75e56c7cb6a2066d8334b1990450db"
+  },
+  "scripts/repack-current-dtb.py": {
+    "bytes": 2130,
+    "sha256": "021c5b17b9d98654541ffa3b7e66152a42f41119ef50a0dede3fe9ef8d0236e7"
+  },
+  "wifi/ath10k-cepehus.conf": {
+    "bytes": 59,
+    "sha256": "dd9426ffc2b9493062d8f35c28e5f89a1fb676742a87a7612edece4369f59169"
+  },
+  "wifi/ath10k-final-5ghz.patch": {
+    "bytes": 4382,
+    "sha256": "0bafe212d837f156e6680332cae6935f1ebca00f9b0bc8b5cbdd3a705185c2d5"
+  }
+}

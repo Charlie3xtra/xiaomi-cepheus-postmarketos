@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "original_source_tree_untouched": true,
+  "archive_to_committed_tree_match": true,
+  "all_dirty_worktree_files_match": true,
+  "working_tree_reconstructed": "300b4559681a305af9149e8da9747d43c8bbe6a5",
+  "all_final_camss_and_fastrpc_source_files_match": true,
+  "final_integrated_tree": "30817c1ae1f03fd5a64ee8f529b9b6cb2db68a00",
+  "final_static_dts_recompiled_all_properties_and_reservations_match": true,
+  "compiled_dtb_sha256": "b8d786e8180f80d0df00ff4e3f781eecd1aa734f0dd857acef5152ea1902e3e7",
+  "image8_clean_room_rebuild_performed": false
+}

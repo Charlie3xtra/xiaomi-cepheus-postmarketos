@@ -1,0 +1,52 @@
+[
+  {
+    "path": "/soc@0/geniqup@ac0000/serial@a84000/bluetooth",
+    "compatible": "qcom,wcn3990-bt",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/geniqup@cc0000/i2c@c80000/touchscreen@49",
+    "compatible": "st,stmfts",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/remoteproc@4080000",
+    "compatible": "qcom,sm8150-mpss-pas",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/clock-controller@ad00000",
+    "compatible": "qcom,sm8150-camcc",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/display-subsystem@ae00000/display-controller@ae01000",
+    "compatible": "qcom,sm8150-dpu",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/display-subsystem@ae00000/dsi@ae94000",
+    "compatible": "qcom,sm8150-dsi-ctrl,qcom,mdss-dsi-ctrl",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/display-subsystem@ae00000/phy@ae94400",
+    "compatible": "qcom,dsi-phy-7nm-8150",
+    "status": "okay"
+  },
+  {
+    "path": "/soc@0/display-subsystem@ae00000/dsi@ae96000",
+    "compatible": "qcom,sm8150-dsi-ctrl,qcom,mdss-dsi-ctrl",
+    "status": "disabled"
+  },
+  {
+    "path": "/soc@0/display-subsystem@ae00000/phy@ae96400",
+    "compatible": "qcom,dsi-phy-7nm-8150",
+    "status": "disabled"
+  },
+  {
+    "path": "/soc@0/wifi@18800000",
+    "compatible": "qcom,wcn3990-wifi",
+    "status": "okay"
+  }
+]

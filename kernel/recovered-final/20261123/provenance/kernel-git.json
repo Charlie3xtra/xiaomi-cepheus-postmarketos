@@ -1,0 +1,40 @@
+{
+  "root_snapshot_commit": "bdec564f41064359aa4e2f4cd9993c4badb9b7a7",
+  "working_head_commit": "13caddd41289c63df0cdeeb41fee722cf6947051",
+  "working_head_tree": "0dc2e92c4591d72cca37911c6b280da0e7e7b58e",
+  "git_tag_at_head": null,
+  "head_is_local_history_not_a_public_upstream_tag": true,
+  "commits": [
+    "3fae97b76d25f7054ec2b200a99c2585c1e690e2 Applied pmaports base patches",
+    "b2edd8e6781e2030d2911fe40182437cb9965b84 Apply 0055-media-camss-add-sm8150-support.patch",
+    "dc9398930bc799b57be581e66f3e085920d7a68b Apply 0056-arm64-dts-sm8150-add-the-camera-subsystem.patch",
+    "8ca97cfa51097a8ca145eb59dd90530ee013b96f Apply 0057-arm64-dts-sm8150-add-the-camera-control-interfaces.patch",
+    "ac5452c0d212e9c798c7215f9d96c6a9181639c6 Apply 0064-media-camss-give-sm8150-its-own-csiphy-generation.patch",
+    "3b352bb5af9a69301e0c8468b1ed67da4931f76e Apply 0065-media-camss-report-vfe-interrupt-status.patch",
+    "6769d6b1cedbbbcb78c9a11c241769dd61e9234a Apply 0066-media-camss-keep-sm8150-dma-in-range.patch",
+    "1137d5efee52df4647a92c88ce74244ebdac4e74 Apply 0067-media-camss-vote-camera-noc-bandwidth-on-sm8150.patch",
+    "79a4cf959fa223da073b6f6910cb2292c7814f66 Apply 0074-media-camss-program-the-sm8150-camnoc-qos.patch",
+    "8ef66976533a9d954ee7fd6999db7b79e50c62d1 Apply 0075-media-camss-vote-the-internal-sm8150-camnoc-path.patch",
+    "b5bc241c825cb11e507f6bd893cb9668149cc37d Apply 0089-media-qcom-camss-add-SM8150-C-PHY-support.patch",
+    "3e707a14cf6acd0b80522e2f40f8471a95884e60 Apply 0076, 0090 (drivers), 0091",
+    "cc8799db6c448ee1bef1892649f3052b626f10a8 Apply 0114 unwind stream starts",
+    "62c7482fdc3b94d16d4add242400d3edff5c5143 Make imx586 GPIOs and VANA voltage flexible for cepheus",
+    "dbf445a39eec053c2e013eb317db00f0860389a3 Add camera and battery nodes to cepheus DTS",
+    "cf3fa47b2d404ac1288ac1afec26aa6c28d069d0 Fix IMX586 power sequence and add cci1 400kHz clock-frequency for cepheus",
+    "748319895bf2b64519a005c28e0bbeb1e0093dba Use CAM_CC_MCLK0_CLK for cepheus IMX586 and probe multiple I2C addresses",
+    "6260369ee186cd8d7df202b5616d11250c38ed0e Move IMX586 to cci0_i2c1 matching Xiaomi Mi 9 hardware routing",
+    "13caddd41289c63df0cdeeb41fee722cf6947051 Restore touchscreen i2c17, add actuators/supplies, scan all buses for IMX586"
+  ],
+  "dirty_paths": [
+    "arch/arm64/boot/dts/qcom/sm8150-xiaomi-cepheus.dts",
+    "drivers/gpu/drm/msm/msm_gem.c",
+    "drivers/media/i2c/imx586.c",
+    "drivers/media/platform/qcom/camss/camss-csid-gen2.c",
+    "drivers/media/platform/qcom/camss/camss.c",
+    "drivers/net/wireless/ath/ath10k/core.c",
+    "drivers/net/wireless/ath/ath10k/debug.c",
+    "drivers/net/wireless/ath/ath10k/hw.h",
+    "drivers/net/wireless/ath/ath10k/mac.c"
+  ],
+  "untracked_files": []
+}

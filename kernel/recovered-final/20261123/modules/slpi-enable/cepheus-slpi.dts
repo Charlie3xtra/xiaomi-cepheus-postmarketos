@@ -1,0 +1,11 @@
+/dts-v1/;
+/plugin/;
+/ {
+    fragment@0 {
+        target-path = "/soc@0/remoteproc@2400000";
+        __overlay__ {
+            firmware-name = "slpi_cp.mdt";
+            status = "okay";
+        };
+    };
+};

@@ -1,0 +1,7 @@
+{
+  "commit": "1ea42816e99975debc93e88fae1849de73308a41",
+  "kernel_package_is_modified": true,
+  "actual_image8_toolchain_is_gcc_not_APKBUILD_LLVM": true,
+  "upstream_archive_url": "https://gitlab.com/sm8150-mainline/linux/-/archive/v6.17.0-sm8150/linux-v6.17.0-sm8150.tar.gz",
+  "upstream_archive_sha512": "274270bb0391bca972b1dffae778ff6fc372457b658e9252104d9894c9f24739e25df7021378cf0ac9c650cc417d0cdcdf1baa88bfdcd494920ee183298e1f34"
+}
