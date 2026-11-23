@@ -1,0 +1,17 @@
+[Unit]
+Description=Initialize Xiaomi Mi 9 UART13 Bluetooth and factory identity
+After=systemd-udev-trigger.service
+Before=bluetooth.service
+Wants=bluetooth.service
+ConditionKernelVersion=6.17.0-sm8150
+ConditionPathExists=/var/lib/cepheus-private/bluetooth-address
+ConditionPathExists=/var/lib/cepheus-private/bluetooth-startup-policy
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/cepheus-bluetooth-start
+RemainAfterExit=yes
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

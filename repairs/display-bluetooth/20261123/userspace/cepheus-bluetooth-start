@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Initialize the validated cepheus UART and restore a private factory identity."""
+import hashlib
+import os
+from pathlib import Path
+import re
+import socket
+import stat
+import struct
+import subprocess
+import time
+
+UART = Path('/sys/firmware/devicetree/base/soc@0/geniqup@cc0000/serial@c8c000')
+MODULE = Path('/usr/local/lib/cepheus/cepheus_uart13.ko')
+EXPECTED_HASH = Path('/usr/local/lib/cepheus/uart13-module.sha256')
+IDENTITY = Path('/var/lib/cepheus-private/bluetooth-address')
+POLICY = Path('/var/lib/cepheus-private/bluetooth-startup-policy')
+
+
+def controller():
+    for entry in Path('/sys/class/bluetooth').glob('hci*'):
+        if (entry / 'device/of_node').resolve() == UART / 'bluetooth':
+            return int(entry.name[3:])
+    return None
+
+
+class Management:
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW,
+                                  socket.BTPROTO_HCI)
+        self.sock.bind((0xffff, 3))
+
+    def close(self):
+        self.sock.close()
+
+    def command(self, opcode, index, payload=b''):
+        self.sock.send(struct.pack('<HHH', opcode, index, len(payload)) + payload)
+        deadline = time.monotonic() + 5
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('Bluetooth management response timed out')
+            self.sock.settimeout(remaining)
+            packet = self.sock.recv(2048)
+            if len(packet) < 6:
+                continue
+            event, returned_index, size = struct.unpack_from('<HHH', packet)
+            if len(packet) != size + 6:
+                raise RuntimeError('Invalid Bluetooth management packet size')
+            if event not in (1, 2) or returned_index != index or size < 3:
+                continue
+            returned_opcode, status = struct.unpack_from('<HB', packet, 6)
+            if returned_opcode != opcode:
+                continue
+            if status:
+                raise RuntimeError(f'Bluetooth management command {opcode:#x} failed: {status}')
+            if event != 1:
+                raise RuntimeError('Unexpected Bluetooth command status response')
+            return packet[9:]
+
+    def indexes(self, opcode):
+        data = self.command(opcode, 0xffff)
+        count = struct.unpack_from('<H', data)[0]
+        if len(data) != 2 + 2 * count:
+            raise RuntimeError('Invalid controller index list')
+        return struct.unpack_from('<' + 'H' * count, data, 2)
+
+
+def main():
+    if os.uname().release != '6.17.0-sm8150':
+        raise RuntimeError('This guarded runtime module supports the verified kernel only')
+    policy = POLICY.read_text().strip()
+    if policy not in ('trial', 'enabled'):
+        print('Bluetooth startup is disarmed; leaving the original device tree unchanged', flush=True)
+        return
+    if IDENTITY.stat().st_uid != 0 or stat.S_IMODE(IDENTITY.stat().st_mode) != 0o600:
+        raise RuntimeError('Factory Bluetooth identity must be root-owned with mode 0600')
+    text = IDENTITY.read_text().strip()
+    if not re.fullmatch(r'(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}', text):
+        raise RuntimeError('Private factory Bluetooth identity is malformed')
+    canonical = bytes.fromhex(text.replace(':', ''))
+    if canonical in (bytes(6), b'\xff' * 6) or canonical[0] & 1:
+        raise RuntimeError('Private factory Bluetooth identity is not valid unicast')
+    address = canonical[::-1]  # Management/HCI addresses use little-endian order.
+    if hashlib.sha256(MODULE.read_bytes()).hexdigest() != EXPECTED_HASH.read_text().strip():
+        raise RuntimeError('Guarded UART module checksum mismatch')
+    if policy == 'trial':
+        # Consume a trial before touching hardware, so a failed boot cannot loop.
+        temporary = POLICY.with_name('.bluetooth-startup-policy.tmp')
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(descriptor, b'disabled\n')
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, POLICY)
+        descriptor = os.open(POLICY.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    if not Path('/sys/module/cepheus_uart13').exists():
+        subprocess.run(['insmod', str(MODULE)], check=True, timeout=20)
+    firmware_property = (UART / 'bluetooth/firmware-name').read_bytes()
+    if firmware_property != b'cepheus-crnv21\0cepheus-crbtfw21.tlv\0':
+        raise RuntimeError('Expected explicit stock firmware selection is absent')
+    mgmt = Management()
+    try:
+        deadline = time.monotonic() + 35
+        while True:
+            index = controller()
+            configured = mgmt.indexes(3)
+            unconfigured = mgmt.indexes(0x36)
+            if index is not None and index in configured + unconfigured:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError('UART13 Bluetooth controller did not register')
+            time.sleep(.5)
+        if index in unconfigured:
+            _, supported, missing = struct.unpack('<HII', mgmt.command(0x37, index))
+            if not supported & 2 or missing != 2:
+                raise RuntimeError('Controller has unexpected missing configuration options')
+            remaining = struct.unpack('<I', mgmt.command(0x39, index, address))[0]
+            if remaining:
+                raise RuntimeError('Controller still has missing configuration options')
+        for attempt in range(20):
+            index = controller()
+            if index is not None and index in mgmt.indexes(3):
+                info = mgmt.command(4, index)
+                if info[:6] != address:
+                    raise RuntimeError('Configured controller identity does not match factory identity')
+                print('UART13 Bluetooth configured with stock firmware and private factory identity',
+                      flush=True)
+                return
+            time.sleep(.5)
+        raise TimeoutError('Bluetooth controller did not enter configured state')
+    finally:
+        mgmt.close()
+
+
+if __name__ == '__main__':
+    main()
