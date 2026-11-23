@@ -1,0 +1,8 @@
+#!/bin/sh
+# One-shot telephoto AF; run before opening another camera client.
+# The focused position remains held after the command exits.
+set -eu
+systemctl start cepheus-af-rail.service
+exec /usr/local/libexec/cepheus-camera-session \
+ /usr/local/libexec/cepheus-tele-af-20261107 \
+ --bus=4 --addr=0x0c --max=1023 --chip=ak7374 --camera=tele "$@"

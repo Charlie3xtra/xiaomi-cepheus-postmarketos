@@ -1,0 +1,14 @@
+[Unit]
+Description=Initialize Xiaomi Mi 9 Snapdragon Sensor Core
+After=systemd-udev-trigger.service cepheus-cameras.service
+Before=cepheus-orientation.service
+ConditionPathExists=/proc/device-tree/reserved-memory/cepheus-ssc-pool
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/cepheus-sensors-start
+RemainAfterExit=yes
+TimeoutStartSec=100
+
+[Install]
+WantedBy=multi-user.target

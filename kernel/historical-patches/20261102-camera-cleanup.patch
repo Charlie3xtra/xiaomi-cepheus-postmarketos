@@ -1,0 +1,1099 @@
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -16,15 +16,6 @@
+ #include "camss-csid.h"
+ #include "camss-csid-gen2.h"
+ #include "camss.h"
+-
+-/* DBG knobs */
+-static int no_rdi_halt;
+-module_param(no_rdi_halt, int, 0644);
+-static int frm_drop_pat = -1;
+-module_param(frm_drop_pat, int, 0644);
+-
+-/* DBG counters */
+-static u32 dbg_n_irq, dbg_sol, dbg_eol, dbg_sof, dbg_eof, dbg_err, dbg_drop;
+ 
+ /* The CSID 2 IP-block is different from the others,
+  * and is of a bare-bones Lite version, with no PIX
+@@ -181,20 +172,6 @@
+ #define		TPG_COLOR_BOX_CFG_MODE		0
+ #define		TPG_COLOR_BOX_PATTERN_SEL	2
+ 
+-static int rdi_dt = -1;
+-module_param(rdi_dt, int, 0644);
+-MODULE_PARM_DESC(rdi_dt, "Override RDI data type (-1 = from format)");
+-
+-static bool rdi_off;
+-module_param(rdi_off, bool, 0644);
+-MODULE_PARM_DESC(rdi_off, "Do not set RDI_CFG0 ENABLE (debug)");
+-static uint rdi_resume_period;
+-module_param(rdi_resume_period, uint, 0644);
+-MODULE_PARM_DESC(rdi_resume_period, "Re-issue RDI resume every N irqs (0=off)");
+-static int meas_en;
+-module_param(meas_en, int, 0644);
+-MODULE_PARM_DESC(meas_en, "Enable CSID format-measure pixel/line counters");
+-
+ static void __csid_configure_rx(struct csid_device *csid,
+ 				struct csid_phy_config *phy, int vc)
+ {
+@@ -209,8 +186,6 @@
+ 	val |= phy->csiphy_id << CSI2_RX_CFG0_PHY_NUM_SEL;
+ 	val |= phy->is_cphy << CSI2_RX_CFG0_PHY_TYPE_SEL;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
+-	dev_info(csid->camss->dev, "CSID%d RX_CFG0 write=0x%08x readback=0x%08x\n",
+-		 csid->id, val, readl_relaxed(csid->base + CSID_CSI2_RX_CFG0));
+ 
+ 	val = 1 << CSI2_RX_CFG1_PACKET_ECC_CORRECTION_EN;
+ 	if (vc > 3)
+@@ -308,7 +283,7 @@
+ 	val |= 1 << RDI_CFG0_TIMESTAMP_EN;
+ 	/* note: for non-RDI path, this should be format->decode_format */
+ 	val |= DECODE_FORMAT_PAYLOAD_ONLY << RDI_CFG0_DECODE_FORMAT;
+-	val |= (rdi_dt >= 0 ? rdi_dt : format->data_type) << RDI_CFG0_DATA_TYPE;
++	val |= format->data_type << RDI_CFG0_DATA_TYPE;
+ 	val |= vc << RDI_CFG0_VIRTUAL_CHANNEL;
+ 	val |= dt_id << RDI_CFG0_DT_ID;
+ 	writel_relaxed(val, csid->base + CSID_RDI_CFG0(vc));
+@@ -320,13 +295,13 @@
+ 	val = 1;
+ 	writel_relaxed(val, csid->base + CSID_RDI_FRM_DROP_PERIOD(vc));
+ 
+-	val = (frm_drop_pat >= 0) ? frm_drop_pat : 0;
++	val = 0;
+ 	writel_relaxed(val, csid->base + CSID_RDI_FRM_DROP_PATTERN(vc));
+ 
++	val = 1;
++	writel_relaxed(val, csid->base + CSID_RDI_IRQ_SUBSAMPLE_PERIOD(vc));
++
+ 	val = 0;
+-	writel_relaxed(val, csid->base + CSID_RDI_IRQ_SUBSAMPLE_PERIOD(vc));
+-
+-	val = 1;
+ 	writel_relaxed(val, csid->base + CSID_RDI_IRQ_SUBSAMPLE_PATTERN(vc));
+ 
+ 	val = 1;
+@@ -342,70 +317,17 @@
+ 	writel_relaxed(val, csid->base + CSID_RDI_RPP_LINE_DROP_PATTERN(vc));
+ 
+ 	val = 0;
+-	if (!no_rdi_halt)
+-		writel_relaxed(val, csid->base + CSID_RDI_CTRL(vc));
++	writel_relaxed(val, csid->base + CSID_RDI_CTRL(vc));
+ 
+ 	val = readl_relaxed(csid->base + CSID_RDI_CFG0(vc));
+-	if (!rdi_off)
+-		val |=  enable << RDI_CFG0_ENABLE;
++	val |=  enable << RDI_CFG0_ENABLE;
+ 	writel_relaxed(val, csid->base + CSID_RDI_CFG0(vc));
+-
+-	if (enable && meas_en) {
+-		/* enable pixel and line counters of the format measurement block */
+-		writel_relaxed(3, csid->base + CSID_RDI_CFG0(vc) + 0x70);
+-		dev_info(csid->camss->dev,
+-			 "CSIDFMEN rdi=%u cfg0=%08x meas_cfg0=%08x\n",
+-			 vc, readl_relaxed(csid->base + CSID_RDI_CFG0(vc)),
+-			 readl_relaxed(csid->base + CSID_RDI_CFG0(vc) + 0x70));
+-	}
+ }
+ 
+ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ {
+ 	struct csid_testgen_config *tg = &csid->testgen;
+ 	u8 i;
+-
+-	if (enable)
+-		dbg_n_irq = dbg_sol = dbg_eol = dbg_sof = dbg_eof = dbg_err = dbg_drop = 0;
+-
+-	/* Ensure at least VC 0 is enabled if source pad 1 is connected */
+-	if (!csid->phy.en_vc) {
+-		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++) {
+-			if (media_pad_remote_pad_first(&csid->pads[MSM_CSID_PAD_FIRST_SRC + i]))
+-				csid->phy.en_vc |= BIT(i);
+-		}
+-		if (!csid->phy.en_vc)
+-			csid->phy.en_vc = BIT(0);
+-	}
+-
+-	dev_info(csid->camss->dev,
+-		 "CSID%d configure_stream(enable=%u): en_vc=0x%x is_cphy=%d lane_cnt=%d csiphy_id=%d\n",
+-		 csid->id, enable, csid->phy.en_vc, csid->phy.is_cphy,
+-		 csid->phy.lane_cnt, csid->phy.csiphy_id);
+-
+-	if (enable) {
+-		/* Clear pending IRQs */
+-		writel_relaxed(~0u, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
+-		writel_relaxed(~0u, csid->base + CSID_TOP_IRQ_CLEAR);
+-		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+-			writel_relaxed(~0u, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
+-		writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
+-
+-		/* Unmask interrupts */
+-		writel_relaxed(~0u, csid->base + CSID_CSI2_RX_IRQ_MASK);
+-		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+-			writel_relaxed(~0u, csid->base + CSID_CSI2_RDIN_IRQ_MASK(i));
+-		writel_relaxed(~0u, csid->base + CSID_TOP_IRQ_MASK);
+-		writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
+-	} else {
+-		/* Mask interrupts on stream stop */
+-		writel_relaxed(0, csid->base + CSID_CSI2_RX_IRQ_MASK);
+-		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+-			writel_relaxed(0, csid->base + CSID_CSI2_RDIN_IRQ_MASK(i));
+-		writel_relaxed(BIT(TOP_IRQ_STATUS_RESET_DONE), csid->base + CSID_TOP_IRQ_MASK);
+-		writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
+-	}
+-
+ 	/* Loop through all enabled VCs and configure stream for each */
+ 	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+ 		if (csid->phy.en_vc & BIT(i)) {
+@@ -415,15 +337,6 @@
+ 			__csid_configure_rdi_stream(csid, enable, i);
+ 			__csid_configure_rx(csid, &csid->phy, i);
+ 			__csid_ctrl_rdi(csid, enable, i);
+-
+-			if (enable) {
+-				u32 v_hw = readl_relaxed(csid->base + 0x0);
+-				u32 v_rx0 = readl_relaxed(csid->base + CSID_CSI2_RX_CFG0);
+-				u32 v_rdi0 = readl_relaxed(csid->base + CSID_RDI_CFG0(i));
+-				dev_info(csid->camss->dev,
+-					 "CSID%d base=%p: HW_VER=0x%08x RX_CFG0=0x%08x RDI0_CFG0=0x%08x\n",
+-					 csid->id, csid->base, v_hw, v_rx0, v_rdi0);
+-			}
+ 		}
+ }
+ 
+@@ -446,24 +359,21 @@
+ {
+ 	struct csid_device *csid = dev;
+ 	u32 val;
+-	u32 top_status, rx_status = 0, rdi_status = 0;
+ 	u8 reset_done;
+ 	int i;
+ 
+-	top_status = readl_relaxed(csid->base + CSID_TOP_IRQ_STATUS);
+-	writel_relaxed(top_status, csid->base + CSID_TOP_IRQ_CLEAR);
+-	reset_done = top_status & BIT(TOP_IRQ_STATUS_RESET_DONE);
+-
+-	rx_status = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
+-	writel_relaxed(rx_status, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	val = readl_relaxed(csid->base + CSID_TOP_IRQ_STATUS);
++	writel_relaxed(val, csid->base + CSID_TOP_IRQ_CLEAR);
++	reset_done = val & BIT(TOP_IRQ_STATUS_RESET_DONE);
++
++	val = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
++	writel_relaxed(val, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
+ 
+ 	/* Read and clear IRQ status for each enabled RDI channel */
+ 	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+ 		if (csid->phy.en_vc & BIT(i)) {
+ 			val = readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_STATUS(i));
+ 			writel_relaxed(val, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
+-			if (i == 0)
+-				rdi_status = val;
+ 		}
+ 
+ 	val = 1 << IRQ_CMD_CLEAR;
+@@ -471,115 +381,6 @@
+ 
+ 	if (reset_done)
+ 		complete(&csid->reset_complete);
+-
+-	/* CSID_DBG_V1 */
+-	dbg_n_irq++;
+-	if (rdi_resume_period && (dbg_n_irq % rdi_resume_period) == 0) {
+-		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+-			if (csid->phy.en_vc & BIT(i))
+-				writel_relaxed(HALT_CMD_RESUME_AT_FRAME_BOUNDARY
+-					       << RDI_CTRL_HALT_CMD,
+-					       csid->base + CSID_RDI_CTRL(i));
+-		dev_info(csid->camss->dev,
+-			 "CSID%d RESUME retry irq=%u ctrl0=%08x cfg0=%08x st=%08x bcnt=%08x/%08x meas0=%08x\n",
+-			 csid->id, dbg_n_irq,
+-			 readl_relaxed(csid->base + CSID_RDI_CTRL(0)),
+-			 readl_relaxed(csid->base + CSID_RDI_CFG0(0)),
+-		 readl_relaxed(csid->base + CSID_RDI_CFG0(0) + 0x50),
+-		 readl_relaxed(csid->base + CSID_RDI_CFG0(0) + 0xe0),
+-		 readl_relaxed(csid->base + CSID_RDI_CFG0(0) + 0xe4),
+-		 readl_relaxed(csid->base + CSID_RDI_CFG0(0) + 0x78));
+-	}
+-	if (dbg_n_irq <= 40)
+-		dev_info(csid->camss->dev, "CSID%d irq#%u rx=0x%08x rdi=0x%08x\n",
+-			 csid->id, dbg_n_irq, rx_status, rdi_status);
+-	if (dbg_n_irq == 20000) {
+-		u32 rb = csid_is_lite(csid) ? 0x200 : 0x300;
+-
+-		dev_info(csid->camss->dev,
+-			 "CSIDDUMP rx_cfg0=%08x rx_cfg1=%08x rx_st=%08x rx_msk=%08x rdin_st=%08x rdin_msk=%08x top=%08x top_msk=%08x\n",
+-			 readl_relaxed(csid->base + 0x100),
+-			 readl_relaxed(csid->base + 0x104),
+-			 readl_relaxed(csid->base + 0x20),
+-			 readl_relaxed(csid->base + 0x24),
+-			 readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_STATUS(0)),
+-			 readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_MASK(0)),
+-			 readl_relaxed(csid->base + 0x70),
+-			 readl_relaxed(csid->base + 0x74));
+-		dev_info(csid->camss->dev,
+-			 "CSIDDUMP rdi0 cfg0=%08x cfg1=%08x ctrl=%08x fdrop=%08x/%08x subs=%08x/%08x\n",
+-			 readl_relaxed(csid->base + rb + 0x00),
+-			 readl_relaxed(csid->base + rb + 0x04),
+-			 readl_relaxed(csid->base + rb + 0x08),
+-			 readl_relaxed(csid->base + rb + 0x10),
+-			 readl_relaxed(csid->base + rb + 0x0c),
+-			 readl_relaxed(csid->base + rb + 0x18),
+-			 readl_relaxed(csid->base + rb + 0x14));
+-		dev_info(csid->camss->dev,
+-			 "CSIDDUMP tpg=%08x vc=%08x blank=%08x dt0=%08x/%08x/%08x\n",
+-			 readl_relaxed(csid->base + 0x600),
+-			 readl_relaxed(csid->base + 0x604),
+-			 readl_relaxed(csid->base + 0x608),
+-			 readl_relaxed(csid->base + 0x610),
+-			 readl_relaxed(csid->base + 0x614),
+-			 readl_relaxed(csid->base + 0x618));
+-	}
+-
+-	{
+-		static u32 hist_val[8], hist_cnt[8];
+-		static int nhist;
+-		int i, slot = -1;
+-
+-		for (i = 0; i < nhist; i++)
+-			if (hist_val[i] == rdi_status) {
+-				slot = i;
+-				break;
+-			}
+-		if (slot < 0 && nhist < 8) {
+-			slot = nhist++;
+-			hist_val[slot] = rdi_status;
+-		}
+-		if (slot >= 0)
+-			hist_cnt[slot]++;
+-
+-		if ((dbg_n_irq % 20000) == 0) {
+-			for (i = 0; i < nhist; i++)
+-				dev_info(csid->camss->dev,
+-					 "CSIDHIST irq=%u val=%08x cnt=%u\n",
+-					 dbg_n_irq, hist_val[i], hist_cnt[i]);
+-		}
+-	}
+-
+-	if ((dbg_n_irq % 90000) == 1) {
+-		dev_info(csid->camss->dev,
+-			 "CSIDFM irq=%u rdist=%08x meas0=%08x meas1=%08x\n",
+-			 dbg_n_irq,
+-			 readl_relaxed(csid->base + 0x350),
+-			 readl_relaxed(csid->base + 0x378),
+-			 readl_relaxed(csid->base + 0x37c));
+-	}
+-	if (rdi_status & BIT(11)) dbg_sol++;
+-	if (rdi_status & BIT(10)) dbg_eol++;
+-	if (rdi_status & BIT(4)) dbg_sof++;
+-	if (rdi_status & BIT(3)) dbg_eof++;
+-	if (rdi_status & (BIT(2) | BIT(12) | BIT(13) | BIT(14) | BIT(18) | BIT(19))) dbg_err++;
+-	if (rdi_status & (BIT(5) | BIT(6) | BIT(7) | BIT(8))) dbg_drop++;
+-	if ((dbg_n_irq % 2000) == 0) {
+-		struct csiphy_device *cs = &csid->camss->csiphy[csid->phy.csiphy_id];
+-		u32 o = (cs && cs->regs) ? cs->regs->offset : 0x800;
+-		u32 s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+-
+-		if (cs && cs->base) {
+-			s0 = readl_relaxed(cs->base + o + 0xb0);
+-			s1 = readl_relaxed(cs->base + o + 0xb4);
+-			s2 = readl_relaxed(cs->base + o + 0xb8);
+-			s3 = readl_relaxed(cs->base + o + 0xbc);
+-		}
+-		dev_info(csid->camss->dev,
+-			 "CSID%d irq=%u sol=%u eol=%u sof=%u eof=%u drop=%u err=%u rdi=0x%08x rx=0x%08x | phy=%08x %08x %08x %08x\n",
+-			 csid->id, dbg_n_irq, dbg_sol, dbg_eol, dbg_sof, dbg_eof, dbg_drop,
+-			 dbg_err, rdi_status, rx_status, s0, s1, s2, s3);
+-	}
+ 
+ 	return IRQ_HANDLED;
+ }
+@@ -590,10 +391,73 @@
+  *
+  * Return 0 on success or a negative error code otherwise
+  */
++/*
++ * SM8150/CSID175 requires the downstream global-reset preparation: keep
++ * receiver clocks active, prepare every data path, then reset hardware and
++ * software registers separately. Poll RESET_DONE with the top IRQ masked;
++ * a zero reset-strobe value is not evidence that reset has completed.
++ * See Xiaomi cepheus-p-oss cam_ife_csid_global_reset().
++ */
++static int csid_reset_8150(struct csid_device *csid)
++{
++	u32 status;
++	unsigned int i;
++	int ret;
++
++	writel(0, csid->base + CSID_TOP_IRQ_MASK);
++	writel(0, csid->base + CSID_CSI2_RX_IRQ_MASK);
++	writel(0, csid->base + 0x34); /* IPP IRQ mask */
++	writel(0, csid->base + 0xa4); /* PPP IRQ mask */
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(0x0fffffff, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	writel(0x7fff, csid->base + 0x38); /* IPP IRQ clear */
++	writel(0xffff, csid->base + 0xa8); /* PPP IRQ clear */
++	for (i = 0; i < 3; i++) {
++		writel(0, csid->base + CSID_CSI2_RDIN_IRQ_MASK(i));
++		writel(0x7fff, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
++	}
++	writel(1, csid->base + CSID_IRQ_CMD);
++
++	writel(BIT(CSI2_RX_CFG1_CGC_MODE), csid->base + CSID_CSI2_RX_CFG1);
++	writel(1, csid->base + 0x200); /* IPP CFG0 */
++	writel(1, csid->base + 0x700); /* PPP CFG0 */
++	for (i = 0; i < 3; i++)
++		writel(2, csid->base + CSID_RDI_CFG0(i));
++
++	writel(0x1e, csid->base + CSID_RST_STROBES);
++	ret = readl_poll_timeout(csid->base + CSID_TOP_IRQ_STATUS,
++				 status, status & BIT(TOP_IRQ_STATUS_RESET_DONE),
++				 100, 100000);
++	if (ret) {
++		dev_err(csid->camss->dev, "CSID%u hardware reset timeout (%08x)\n",
++			csid->id, status);
++		return ret;
++	}
++
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++	writel(1, csid->base + CSID_RST_STROBES);
++	ret = readl_poll_timeout(csid->base + CSID_TOP_IRQ_STATUS,
++				 status, status & BIT(TOP_IRQ_STATUS_RESET_DONE),
++				 100, 100000);
++	if (ret)
++		dev_err(csid->camss->dev, "CSID%u software reset timeout (%08x)\n",
++			csid->id, status);
++	writel(1, csid->base + CSID_TOP_IRQ_CLEAR);
++	writel(1, csid->base + CSID_IRQ_CMD);
++	writel(1, csid->base + CSID_TOP_IRQ_MASK);
++	return ret;
++}
++
+ static int csid_reset(struct csid_device *csid)
+ {
+-	u32 val, strobes = ~0u;
+-	int ret;
++	unsigned long time;
++	u32 val;
++
++	if (csid->camss->res->version == CAMSS_8150)
++		return csid_reset_8150(csid);
++
++	reinit_completion(&csid->reset_complete);
+ 
+ 	writel_relaxed(1, csid->base + CSID_TOP_IRQ_CLEAR);
+ 	writel_relaxed(1, csid->base + CSID_IRQ_CMD);
+@@ -603,21 +467,13 @@
+ 	/* preserve registers */
+ 	val = 0x1e << RST_STROBES;
+ 	writel_relaxed(val, csid->base + CSID_RST_STROBES);
+-	dev_info(csid->camss->dev, "CSID%d reset: strobes just after trigger=0x%08x\n",
+-		 csid->id, readl_relaxed(csid->base + CSID_RST_STROBES));
+-
+-	ret = readl_relaxed_poll_timeout(csid->base + CSID_RST_STROBES, strobes,
+-					 (strobes == 0), 10, 50000);
+-	dev_info(csid->camss->dev, "CSID%d reset: poll ret=%d strobes=0x%08x\n",
+-		 csid->id, ret, strobes);
+-	if (ret) {
+-		dev_err(csid->camss->dev, "CSID%d reset strobes timeout (strobes=0x%08x)\n",
+-			csid->id, strobes);
+-		return ret;
++
++	time = wait_for_completion_timeout(&csid->reset_complete,
++					   msecs_to_jiffies(CSID_RESET_TIMEOUT_MS));
++	if (!time) {
++		dev_err(csid->camss->dev, "CSID reset timeout\n");
++		return -EIO;
+ 	}
+-
+-	writel_relaxed(BIT(TOP_IRQ_STATUS_RESET_DONE), csid->base + CSID_TOP_IRQ_CLEAR);
+-	writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
+ 
+ 	return 0;
+ }
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -775,14 +775,10 @@
+ 			return -ENOLINK;
+ 	}
+ 
+-	dev_info(csid->camss->dev,
+-		 "CSID%d set_stream(%d) pre: top_irq=0x%08x rx_cfg0=0x%08x rst=0x%08x\n",
+-		 csid->id, enable,
+-		 readl_relaxed(csid->base + 0x70),
+-		 readl_relaxed(csid->base + 0x100),
+-		 readl_relaxed(csid->base + 0x10));
+-	csid->res->hw_ops->configure_stream(csid, enable);
+-	csid->phy.need_vc_update = false;
++	if (csid->phy.need_vc_update) {
++		csid->res->hw_ops->configure_stream(csid, enable);
++		csid->phy.need_vc_update = false;
++	}
+ 
+ 	return 0;
+ }
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+@@ -215,17 +215,22 @@
+ };
+ 
+ /* GEN2 1.1 3PH C-PHY mode, from the published SM8150 vendor driver. */
+-static const struct csiphy_lane_regs lane_regs_sm8150_cphy[3][30] = {
++static const struct csiphy_lane_regs lane_regs_sm8150_cphy[3][43] = {
+ 	{
+-		{0x015C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0990, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0994, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0998, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x098C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0168, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x016C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0144, 0xB6, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x015C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0990, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0994, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0998, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0990, 0x48, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0994, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0998, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x098C, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x098C, 0x5F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0168, 0x8E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x016C, 0x59, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0104, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x010C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++		{0x010C, 0x12, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
+ 		{0x0108, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
+ 		{0x0114, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0150, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+@@ -238,26 +243,39 @@
+ 		{0x0124, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0128, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x012C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0144, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0144, 0x32, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0160, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x01CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0164, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0164, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x01DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0984, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x09B0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x09B4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x09B0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x015C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x09B0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0980, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x09B0, 0x23, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x015C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0984, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0988, 0x04, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x09AC, 0x55, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x01DC, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0164, 0x2B, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 	},
+ 	{
+-		{0x035C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0A90, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0A94, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0A98, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0A8C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0368, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x036C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0344, 0xB6, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x035C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A90, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A94, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A98, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A90, 0x48, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A94, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A98, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A8C, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A8C, 0x5F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0368, 0x8E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x036C, 0x59, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0304, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x030C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++		{0x030C, 0x12, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
+ 		{0x0308, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
+ 		{0x0314, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0350, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+@@ -270,26 +288,39 @@
+ 		{0x0324, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0328, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x032C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0344, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0344, 0x32, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0360, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x03CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0364, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0364, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x03DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0A84, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0AB0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0AB4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0AB0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x035C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0AB0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A80, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0AB0, 0x23, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x035C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A84, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0A88, 0x04, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0AAC, 0x55, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x03DC, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0364, 0x2B, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 	},
+ 	{
+-		{0x055C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0B90, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0B94, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0B98, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0B8C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0568, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x056C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0544, 0xB6, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x055C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B90, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B94, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B98, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B90, 0x48, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B94, 0x0F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B98, 0x0A, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B8C, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B8C, 0x5F, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0568, 0x8E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x056C, 0x59, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0504, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x050C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++		{0x050C, 0x12, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
+ 		{0x0508, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
+ 		{0x0514, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0550, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+@@ -302,17 +333,26 @@
+ 		{0x0524, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0528, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x052C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0544, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0544, 0x32, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x0560, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x05CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0564, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0564, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 		{0x05DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0B84, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0BB0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0BB4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+-		{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0BB0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x055C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0BB0, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B80, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0BB0, 0x23, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x055C, 0x40, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B84, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0B88, 0x04, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0BAC, 0x55, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x05DC, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0564, 0x2B, 0x00, CSIPHY_DEFAULT_PARAMS},
++		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
+ 	},
+ };
++
+ /* GEN2 1.2.1 2PH */
+ static const struct
+ csiphy_lane_regs lane_regs_sm8250[] = {
+@@ -914,19 +954,13 @@
+ 	writel_relaxed(val, csiphy->base +
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 6));
+ 
+-	val = 0x52;
++	val = 0x02;
+ 	writel_relaxed(val, csiphy->base +
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 7));
+ 
+-	/* C-PHY: write global mode reg 0x800 = 0x03 (mode-switch prepare,
+-	 * 1ms delay) before the lane table writes 0x0E (3PH mode). This
+-	 * matches the vendor csiphy_common_reg_1_2_2 sequence and prevents
+-	 * the PHY AHB hang seen when jumping straight to 0x0E.
+-	 */
+-	val = 0x03;
++	val = 0x00;
+ 	writel_relaxed(val, csiphy->base +
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
+-	usleep_range(1000, 1500);
+ 
+ 	if (csiphy_is_gen2(csiphy->camss->res->version))
+ 		csiphy_gen2_config_lanes(csiphy, cfg, settle_cnt);
+--- a/drivers/media/platform/qcom/camss/camss-vfe-17x.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+@@ -12,8 +12,6 @@
+ #include <linux/iopoll.h>
+ 
+ #include "camss.h"
+-#include <media/videobuf2-dma-sg.h>
+-
+ #include "camss-vfe.h"
+ 
+ #define VFE_GLOBAL_RESET_CMD			(0x018)
+@@ -176,14 +174,6 @@
+ #define VFE_BUS_WM_FRAME_INC(n)			(0x2258 + (n) * 0x100)
+ #define VFE_BUS_WM_BURST_LIMIT(n)		(0x225c + (n) * 0x100)
+ 
+-static uint bus_cfg;
+-module_param(bus_cfg, uint, 0644);
+-MODULE_PARM_DESC(bus_cfg, "Value written to VFE_BUS_CFG (0x2000) at wm start, 0 = leave alone");
+-
+-static uint wm_cfg_override;
+-module_param(wm_cfg_override, uint, 0644);
+-MODULE_PARM_DESC(wm_cfg_override, "Override VFE_BUS_WM_CFG value (0 = driver default)");
+-
+ static inline void vfe_reg_set(struct vfe_device *vfe, u32 reg, u32 set_bits)
+ {
+ 	u32 bits = readl_relaxed(vfe->base + reg);
+@@ -262,49 +252,12 @@
+ 	dev_info(vfe->camss->dev, "CAMNOC quality-of-service programmed\n");
+ }
+ 
+-static bool camnoc_qos = true;
+-module_param(camnoc_qos, bool, 0644);
+-MODULE_PARM_DESC(camnoc_qos, "Program CAMNOC QoS tables at write-master start");
+-
+-
+-static uint wm_en_last = 1;
+-module_param(wm_en_last, uint, 0644);
+-MODULE_PARM_DESC(wm_en_last, "Enable WM only after the first buffer address is written");
+-
+-static uint addr_after_cfg;
+-module_param(addr_after_cfg, uint, 0644);
+-MODULE_PARM_DESC(addr_after_cfg, "Write image_addr AFTER cfg=EN is set (vendor order), then re-issue reg update");
+-
+-static uint wm_fix = 1;
+-module_param(wm_fix, uint, 0644);
+-MODULE_PARM_DESC(wm_fix, "Program WM frame-drop/subsample/comp-mask companion registers");
+-static uint comp_en = 1;
+-module_param(comp_en, uint, 0644);
+-MODULE_PARM_DESC(comp_en, "Program the bus composite group mask for the WM");
+-static uint packer_cfg;
+-module_param(packer_cfg, uint, 0644);
+-MODULE_PARM_DESC(packer_cfg, "Value for VFE_BUS_WM_PACKER_CFG");
+-static uint core_cfg;
+-module_param(core_cfg, uint, 0644);
+-MODULE_PARM_DESC(core_cfg, "Value to write to VFE_CORE_CFG (0 = leave alone)");
+-
+-static void vfe_schedule_rup(struct vfe_device *vfe);
+-
+ static void vfe_wm_start(struct vfe_device *vfe, u8 wm, struct vfe_line *line)
+ {
+ 	u32 val;
+ 
+-	if (camnoc_qos && vfe->camss->res->version == CAMSS_8150)
++	if (vfe->camss->res->version == CAMSS_8150)
+ 		vfe_camnoc_qos_init(vfe);
+-
+-	if (bus_cfg) {
+-		dev_info(vfe->camss->dev, "VEDUMP bus_cfg 0x2000: %08x -> ",
+-			 readl_relaxed(vfe->base + 0x2000));
+-		writel_relaxed(bus_cfg, vfe->base + 0x2000);
+-		wmb();
+-		dev_info(vfe->camss->dev, "%08x\n",
+-			 readl_relaxed(vfe->base + 0x2000));
+-	}
+ 
+ 	/*Set Debug Registers*/
+ 	val = DEBUG_STATUS_CFG_STATUS0(1) |
+@@ -333,108 +286,17 @@
+ 	val = 0;
+ 	writel_relaxed(val, vfe->base + VFE_BUS_WM_BUFFER_HEIGHT_CFG(wm));
+ 
+-	if (core_cfg) {
+-		writel_relaxed(core_cfg, vfe->base + VFE_CORE_CFG);
+-		wmb();
+-		dev_info(vfe->camss->dev, "VEDUMP core_cfg=%08x\n",
+-			 readl_relaxed(vfe->base + VFE_CORE_CFG));
+-	}
+-
+-	val = packer_cfg;
+-	writel_relaxed(val, vfe->base + VFE_BUS_WM_PACKER_CFG(wm));
++	val = 0;
++	writel_relaxed(val, vfe->base + VFE_BUS_WM_PACKER_CFG(wm)); // XXX 1 for PLAIN8?
+ 
+ 	/* Configure stride for RDIs */
+ 	val = WM_STRIDE_DEFAULT_STRIDE;
+ 	writel_relaxed(val, vfe->base + VFE_BUS_WM_STRIDE(wm));
+ 
+-	if (wm_fix) {
+-		/* no frame drop, one irq per frame (as per vfe-480) */
+-		writel_relaxed(0, vfe->base + VFE_BUS_WM_FRAMEDROP_PERIOD(wm));
+-		writel_relaxed(1, vfe->base + VFE_BUS_WM_FRAMEDROP_PATTERN(wm));
+-		writel_relaxed(0, vfe->base + VFE_BUS_WM_IRQ_SUBSAMPLE_PERIOD(wm));
+-		writel_relaxed(1, vfe->base + VFE_BUS_WM_IRQ_SUBSAMPLE_PATTERN(wm));
+-	}
+-
+-	if (comp_en) {
+-		writel_relaxed(BIT(wm), vfe->base + 0x2010 + wm * 4);
+-		wmb();
+-		dev_info(vfe->camss->dev, "VEDUMP comp_mask%u=%08x\n", wm,
+-			 readl_relaxed(vfe->base + 0x2010 + wm * 4));
+-	}
+-
+ 	/* Enable WM */
+ 	val = 1 << WM_CFG_EN |
+ 	      MODE_MIPI_RAW << WM_CFG_MODE;
+-	if (wm_cfg_override)
+-		val = wm_cfg_override;
+-	if (wm_en_last)
+-		val = 0;
+ 	writel_relaxed(val, vfe->base + VFE_BUS_WM_CFG(wm));
+-	dev_info(vfe->camss->dev, "VEDUMP wm%u cfg write %08x rb %08x\n",
+-		 wm, val, readl_relaxed(vfe->base + VFE_BUS_WM_CFG(wm)));
+-
+-	vfe_schedule_rup(vfe);
+-}
+-
+-/*
+- * Bring-up: the downstream stack issues the AUP/RUP only after every CSID
+- * register of the pipeline has been written. Issuing it from
+- * vfe_enable_output_v2() happens before the CSID is configured and can leave
+- * the write master with no RUP/BUF done at all, so re-issue it from a delayed
+- * work item once streaming has settled.
+- */
+-static uint rup_delay_ms = 120;
+-module_param(rup_delay_ms, uint, 0644);
+-MODULE_PARM_DESC(rup_delay_ms, "Delay before re-issuing the VFE reg update");
+-
+-static uint rup_retry = 12;
+-module_param(rup_retry, uint, 0644);
+-MODULE_PARM_DESC(rup_retry, "How many times to re-issue the VFE reg update");
+-
+-static struct delayed_work rup_work;
+-static struct vfe_device *rup_vfe;
+-static uint rup_left;
+-static bool rup_work_ready;
+-
+-static void vfe_rup_work_fn(struct work_struct *work)
+-{
+-	u32 rb;
+-
+-	if (!rup_vfe)
+-		return;
+-
+-	writel_relaxed(REG_UPDATE_RDI(0), rup_vfe->base + VFE_REG_UPDATE_CMD);
+-	wmb();
+-
+-	rb = readl_relaxed(rup_vfe->base + VFE_IRQ_STATUS_0);
+-	dev_info(rup_vfe->camss->dev,
+-		 "RUPRETRY left=%u status0=%08x irq1=%08x wm0cfg=%08x wm0st=%08x/%08x\n",
+-		 rup_left, rb,
+-		 readl_relaxed(rup_vfe->base + VFE_IRQ_STATUS_1),
+-		 readl_relaxed(rup_vfe->base + VFE_BUS_WM_CFG(0)),
+-		 readl_relaxed(rup_vfe->base + VFE_BUS_WM_STATUS0(0)),
+-		 readl_relaxed(rup_vfe->base + VFE_BUS_WM_STATUS1(0)));
+-
+-	if (rup_left > 1) {
+-		rup_left--;
+-		queue_delayed_work(system_wq, &rup_work,
+-				   msecs_to_jiffies(rup_delay_ms));
+-	}
+-}
+-
+-static void vfe_schedule_rup(struct vfe_device *vfe)
+-{
+-	if (!rup_retry)
+-		return;
+-
+-	rup_vfe = vfe;
+-	rup_left = rup_retry;
+-	if (!rup_work_ready) {
+-		INIT_DELAYED_WORK(&rup_work, vfe_rup_work_fn);
+-		rup_work_ready = true;
+-	}
+-	queue_delayed_work(system_wq, &rup_work,
+-			   msecs_to_jiffies(rup_delay_ms));
+ }
+ 
+ static void vfe_wm_stop(struct vfe_device *vfe, u8 wm)
+@@ -462,63 +324,9 @@
+ 		}
+ 	}
+ 
+-	if (addr_after_cfg) {
+-		u32 cfg = wm_cfg_override ? wm_cfg_override :
+-			  ((1 << WM_CFG_EN) | (MODE_MIPI_RAW << WM_CFG_MODE));
+-		writel_relaxed(cfg, vfe->base + VFE_BUS_WM_CFG(wm));
+-		wmb();
+-	}
+-
+ 	writel_relaxed(addr, vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+ 	writel_relaxed(stride * pix->height, vfe->base + VFE_BUS_WM_FRAME_INC(wm));
+-
+-	if (wm_en_last) {
+-		u32 cfg = wm_cfg_override ? wm_cfg_override :
+-			  ((1 << WM_CFG_EN) | (MODE_MIPI_RAW << WM_CFG_MODE));
+-
+-		wmb();
+-		writel_relaxed(cfg, vfe->base + VFE_BUS_WM_CFG(wm));
+-		wmb();
+-	}
+-
+-	/* Bring-up: does the address stick? */
+-	dev_info(vfe->camss->dev,
+-		 "VMUPD wm%u wrote addr=%08x inc=%08x -> rb addr=%08x inc=%08x cfg=%08x vio=%08x\n",
+-		 wm, addr, stride * pix->height,
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_FRAME_INC(wm)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_CFG(wm)),
+-		 readl_relaxed(vfe->base + VFE_VIOLATION_STATUS));
+-
+-	/* Raw probe: does the image_addr register latch ANY value? */
+-	{
+-		static int probed;
+-		if (probed < 2) {
+-			u32 r1, r2, r3;
+-			probed++;
+-			writel_relaxed(0xAAAAAAAA, vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			r1 = readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			writel_relaxed(0x55555555, vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			r2 = readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			/* write the real address back */
+-			writel_relaxed(addr, vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			r3 = readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(wm));
+-			dev_info(vfe->camss->dev,
+-				"IMGPROBE wm%u write aa->%08x, write 55->%08x, write real->%08x (hdr_addr=%08x cfg=%08x)\n",
+-				wm, r1, r2, r3,
+-				readl_relaxed(vfe->base + VFE_BUS_WM_HEADER_ADDR(wm)),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_CFG(wm)));
+-		}
+-	}
+-}
+-
+-static bool force_rup;
+-module_param(force_rup, bool, 0644);
+-MODULE_PARM_DESC(force_rup, "Re-issue VFE_REG_UPDATE_CMD on every interrupt");
+-
+-static bool regupd_all;
+-module_param(regupd_all, bool, 0644);
+-MODULE_PARM_DESC(regupd_all, "Commit every VFE module shadow, not just the RDI bit");
++}
+ 
+ static void vfe_reg_update(struct vfe_device *vfe, enum vfe_line_id line_id)
+ {
+@@ -527,30 +335,10 @@
+ 	/* Enforce ordering between previous reg writes and reg update */
+ 	wmb();
+ 
+-	writel_relaxed(regupd_all ? ~0u : vfe->reg_update,
+-		       vfe->base + VFE_REG_UPDATE_CMD);
++	writel_relaxed(vfe->reg_update, vfe->base + VFE_REG_UPDATE_CMD);
+ 
+ 	/* Enforce ordering between reg update and subsequent reg writes */
+ 	wmb();
+-
+-	{
+-		static int dumped;
+-		if (dumped < 4) {
+-			dumped++;
+-			dev_info(vfe->camss->dev,
+-				"RUPW cmd=%08x mask0=%08x mask1=%08x core_cfg=%08x wm0_cfg=%08x wm0_addr=%08x wm0_inc=%08x wm0_st0=%08x wm0_st1=%08x busst0=%08x\n",
+-				readl_relaxed(vfe->base + VFE_REG_UPDATE_CMD),
+-				readl_relaxed(vfe->base + VFE_IRQ_MASK_0),
+-				readl_relaxed(vfe->base + VFE_IRQ_MASK_1),
+-				readl_relaxed(vfe->base + VFE_CORE_CFG),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_CFG(0)),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(0)),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_FRAME_INC(0)),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(0)),
+-				readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(0)),
+-				readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(0)));
+-		}
+-	}
+ }
+ 
+ static inline void vfe_reg_update_clear(struct vfe_device *vfe,
+@@ -592,125 +380,6 @@
+ 	u32 violation = readl_relaxed(vfe->base + VFE_VIOLATION_STATUS);
+ 
+ 	pr_err_ratelimited("VFE: violation = 0x%08x\n", violation);
+-}
+-
+-static void vfe_probe_buffer(struct vfe_device *vfe)
+-{
+-	struct camss_buffer *buf = vfe->line[VFE_LINE_RDI0].output.buf[0];
+-	struct sg_table *sg;
+-	struct page *pg;
+-	u8 head[16];
+-	u32 sum = 0;
+-	void *va;
+-	int i;
+-
+-	if (!buf) {
+-		dev_info(vfe->camss->dev, "BUFCHK no queued buffer\n");
+-		return;
+-	}
+-
+-	dev_info(vfe->camss->dev, "BUFCHK bufs: %px %px\n",
+-		 vfe->line[VFE_LINE_RDI0].output.buf[0],
+-		 vfe->line[VFE_LINE_RDI0].output.buf[1]);
+-
+-	sg = vb2_dma_sg_plane_desc(&buf->vb.vb2_buf, 0);
+-	if (!sg) {
+-		dev_info(vfe->camss->dev, "BUFCHK no sg table\n");
+-		return;
+-	}
+-
+-	pg = sg_page(sg->sgl);
+-	va = kmap_local_page(pg);
+-	memcpy(head, va, sizeof(head));
+-	for (i = 0; i < 4096; i++)
+-		sum += ((u8 *)va)[i];
+-	kunmap_local(va);
+-
+-	dev_info(vfe->camss->dev,
+-		 "BUFCHK seq=%u state=%d sum4k=%u head=%02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n",
+-		 buf->vb.vb2_buf.index, vfe->line[VFE_LINE_RDI0].output.state, sum,
+-		 head[0], head[1], head[2], head[3], head[4], head[5], head[6], head[7],
+-		 head[8], head[9], head[10], head[11], head[12], head[13], head[14], head[15]);
+-}
+-
+-static void vfe_dump_bus(struct vfe_device *vfe)
+-{
+-	int n;
+-
+-	dev_info(vfe->camss->dev, "VEDUMP vfemask0=%08x vfemask1=%08x irqcmd=%08x regupd_cmd=%08x\n",
+-		 readl_relaxed(vfe->base + VFE_IRQ_MASK_0),
+-		 readl_relaxed(vfe->base + VFE_IRQ_MASK_1),
+-		 readl_relaxed(vfe->base + VFE_IRQ_CMD),
+-		 readl_relaxed(vfe->base + VFE_REG_UPDATE_CMD));
+-	dev_info(vfe->camss->dev, "VEDUMP irq0=%08x irq1=%08x msk0=%08x msk1=%08x msk2=%08x\n",
+-		 readl_relaxed(vfe->base + VFE_IRQ_STATUS_0),
+-		 readl_relaxed(vfe->base + VFE_IRQ_STATUS_1),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(0)),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(1)),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_MASK(2)));
+-
+-	dev_info(vfe->camss->dev, "VEDUMP busst=%08x %08x %08x %08x\n",
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(0)),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(1)),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(2)),
+-		 readl_relaxed(vfe->base + VFE_BUS_IRQ_STATUS(3)));
+-
+-	for (n = 0; n < 2; n++)
+-		dev_info(vfe->camss->dev,
+-			 "VEDUMP wm%d cfg=%08x st0=%08x st1=%08x addr=%08x stride=%08x inc=%08x wh=%08x/%08x pk=%08x fd=%08x/%08x\n",
+-			 n,
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_CFG(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_STRIDE(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_FRAME_INC(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_BUFFER_WIDTH_CFG(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_BUFFER_HEIGHT_CFG(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_PACKER_CFG(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_FRAMEDROP_PERIOD(n)),
+-			 readl_relaxed(vfe->base + VFE_BUS_WM_FRAMEDROP_PATTERN(n)));
+-
+-	dev_info(vfe->camss->dev, "VEDUMP camif_cfg=%08x regupd=%08x\n",
+-		 readl_relaxed(vfe->base + VFE_CAMIF_CFG),
+-		 readl_relaxed(vfe->base + 0x4a8));
+-
+-	/* Is VFE_BUS_WM_IMAGE_ADDR writable at all? Probe an unused WM. */
+-	writel_relaxed(0x12345678, vfe->base + VFE_BUS_WM_IMAGE_ADDR(1));
+-	dev_info(vfe->camss->dev,
+-		 "VEDUMP wm1 addr probe: rb=%08x cfg_rb=%08x status0=%08x status1=%08x\n",
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_IMAGE_ADDR(1)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_CFG(1)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(1)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(1)));
+-	dev_info(vfe->camss->dev,
+-		 "VEDUMP irq2=%08x core_cfg=%08x wm0st0=%08x wm0st1=%08x\n",
+-		 readl_relaxed(vfe->base + 0x074),
+-		 readl_relaxed(vfe->base + VFE_CORE_CFG),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(0)),
+-		 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(0)));
+-
+-	/* Dump VFE top register block (0x0000 - 0x0100). */
+-	{
+-		int k;
+-		pr_info("VEDUMP top:");
+-		for (k = 0; k < 0x100; k += 4) {
+-			if ((k & 0x1f) == 0)
+-				pr_info("\nVEDUMP top %04x:", k);
+-			pr_cont(" %08x", readl_relaxed(vfe->base + k));
+-		}
+-		pr_cont("\n");
+-	}
+-
+-	/* Scan the bus block looking for the programmed image address. */
+-	for (n = 0; n < 0x300; n += 32) {
+-		int k;
+-
+-		pr_info("VEDUMP %04x:", 0x2000 + n);
+-		for (k = 0; k < 32; k += 4)
+-			pr_cont(" %08x", readl_relaxed(vfe->base + 0x2000 + n + k));
+-		pr_cont("\n");
+-	}
+ }
+ 
+ /*
+@@ -777,51 +446,9 @@
+ 			vfe->isr_ops.comp_done(vfe, i);
+ 
+ 	for (wm = 0; wm < MSM_VFE_IMAGE_MASTERS_NUM; wm++)
+-		if (vfe_bus_status[1] & STATUS1_WM_CLIENT_BUF_DONE(wm))
+-			vfe->isr_ops.wm_done(vfe, wm);
+-
+-
+-	{
+-		static unsigned long n_irq, n_rup, n_cdone, n_wdone, n_last;
+-
+-		n_irq++;
+-		if (status0 & STATUS_0_RDI_REG_UPDATE(VFE_LINE_RDI0))
+-			n_rup++;
+-		if (vfe_bus_status[0] & STATUS0_COMP_BUF_DONE(0))
+-			n_cdone++;
+-		if (vfe_bus_status[1] & STATUS1_WM_CLIENT_BUF_DONE(0))
+-			n_wdone++;
+-		if (n_irq - n_last >= 10) {
+-			n_last = n_irq;
+-			dev_info(vfe->camss->dev,
+-				 "VFESTAT n=%lu rup=%lu cd=%lu wd=%lu s0=%08x s1=%08x b0=%08x b1=%08x cfg=%08x wmst=%08x/%08x vio=%08x nsy=%08x cgc=%08x inc=%08x\n",
+-				 n_irq, n_rup, n_cdone, n_wdone,
+-				 status0, status1,
+-				 vfe_bus_status[0], vfe_bus_status[1],
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_CFG(0)),
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS0(0)),
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_STATUS1(0)),
+-				 readl_relaxed(vfe->base + VFE_VIOLATION_STATUS),
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_ADDR_SYNC_NO_SYNC),
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_CGC_OVERRIDE),
+-				 readl_relaxed(vfe->base + VFE_BUS_WM_FRAME_INC(0)));
+-		}
+-	}
+-
+-	if (force_rup) {
+-		writel_relaxed(~0u, vfe->base + VFE_REG_UPDATE_CMD);
+-		wmb();
+-	}
+-
+-	{
+-		static int dump_count;
+-
+-		if (++dump_count == 5)
+-		{
+-			vfe_dump_bus(vfe);
+-			vfe_probe_buffer(vfe);
+-		}
+-	}
++		if (status0 & BIT(9))
++			if (vfe_bus_status[1] & STATUS1_WM_CLIENT_BUF_DONE(wm))
++				vfe->isr_ops.wm_done(vfe, wm);
+ 
+ 	return IRQ_HANDLED;
+ }

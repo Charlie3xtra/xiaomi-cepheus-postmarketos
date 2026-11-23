@@ -1,0 +1,12 @@
+#!/bin/sh
+export GSK_RENDERER=cairo
+export GDK_DISABLE=dmabuf
+export LD_PRELOAD=/opt/cepheus-camera/lib/libcepheus-camera-orientation.so${LD_PRELOAD:+:$LD_PRELOAD}
+export LIBGL_ALWAYS_SOFTWARE=1
+config=${XDG_CONFIG_HOME:-$HOME/.config}
+mkdir -p "$config"
+if ! grep -q '^XDG_PICTURES_DIR=' "$config/user-dirs.dirs" 2>/dev/null; then
+ printf '%s\n' 'XDG_PICTURES_DIR="$HOME/Pictures"' >> "$config/user-dirs.dirs"
+ mkdir -p "$HOME/Pictures"
+fi
+exec /usr/local/libexec/cepheus-camera-session /usr/bin/snapshot "$@"

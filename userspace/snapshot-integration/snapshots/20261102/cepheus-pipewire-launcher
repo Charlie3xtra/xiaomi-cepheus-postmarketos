@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/libexec/cepheus-camera-session /usr/libexec/pipewire-launcher "$@"

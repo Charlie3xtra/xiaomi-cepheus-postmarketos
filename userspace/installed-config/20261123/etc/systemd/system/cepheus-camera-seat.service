@@ -1,0 +1,7 @@
+[Unit]
+Description=Seat access for standalone Mi 9 camera preview
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/seatd -g video
+ExecStartPost=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do test -S /run/seatd.sock && exit 0; sleep 0.1; done; exit 1'

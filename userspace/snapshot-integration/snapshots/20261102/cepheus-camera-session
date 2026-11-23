@@ -1,0 +1,5 @@
+#!/bin/sh
+set -a
+. /etc/cepheus-camera.env
+set +a
+exec "$@"

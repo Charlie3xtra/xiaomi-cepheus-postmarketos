@@ -1,0 +1,17 @@
+[Unit]
+Description=Publish calibrated Xiaomi Mi 9 camera orientation
+After=cepheus-sensors.service iio-sensor-proxy.service
+Requires=cepheus-sensors.service
+Wants=iio-sensor-proxy.service
+PartOf=iio-sensor-proxy.service
+ConditionPathExists=/proc/device-tree/reserved-memory/cepheus-ssc-pool
+
+[Service]
+ExecStart=/usr/local/libexec/cepheus-orientation
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=cepheus-camera
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

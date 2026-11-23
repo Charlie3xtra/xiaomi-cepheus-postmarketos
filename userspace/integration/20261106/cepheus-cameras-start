@@ -1,0 +1,21 @@
+#!/bin/sh
+# Camera overlay is matched to this device's current DT and kernel.
+set -eu
+test "$(uname -r)" = 6.17.0-sm8150
+if [ -d /sys/module/cepheus_aux ] && [ -d /sys/module/cepheus_overlay ]; then exit 0; fi
+cleanup() {
+    modprobe -r cepheus_aux imx586 qcom_camss 2>/dev/null || true
+    modprobe -r cepheus_overlay 2>/dev/null || true
+    modprobe qcom_camss || true
+    modprobe imx586 || true
+}
+trap cleanup 0
+modprobe -r imx586 qcom_camss
+modprobe cepheus_overlay
+modprobe qcom_camss
+modprobe imx586
+modprobe cepheus_aux
+test -L /sys/bus/i2c/devices/1-001a/driver
+test -L /sys/bus/i2c/devices/4-0010/driver
+test -L /sys/bus/i2c/devices/4-002d/driver
+trap - 0

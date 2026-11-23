@@ -1,0 +1,99 @@
+/dts-v1/;
+/plugin/;
+/ {
+    fragment@0 {
+        target-path = "/soc@0/pinctrl@3100000";
+        __overlay__ {
+            aux_mclk0: cepheus-aux-mclk0 { pins = "gpio13"; function = "cam_mclk"; drive-strength = <2>; bias-disable; };
+            aux_mclk2: cepheus-aux-mclk2 { pins = "gpio15"; function = "cam_mclk"; drive-strength = <2>; bias-disable; };
+            aux_mclk3: cepheus-aux-mclk3 { pins = "gpio16"; function = "cam_mclk"; drive-strength = <2>; bias-disable; };
+        };
+    };
+    fragment@1 {
+        target-path = "/soc@0/cci@ac4a000/i2c-bus@0";
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            camera@1a {
+                compatible = "sony,imx481";
+                reg = <0x1a>;
+                clocks = <190 83>;
+                vio-supply = <195>;
+                vana-supply = <242>;
+                vdig-supply = <197>;
+                reset-gpios = <82 28 1>;
+                enable-gpios = <82 94 0>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&aux_mclk0>;
+                orientation = <1>;
+                rotation = <90>;
+                port { aux_wide: endpoint {
+                    bus-type = <4>;
+                    
+                    data-lanes = <0 1 2 3>;
+                    link-frequencies = /bits/ 64 <654075000>;
+                    remote-endpoint = <&aux_phy0>;
+                }; };
+            };
+        };
+    };
+    fragment@2 {
+        target-path = "/soc@0/cci@ac4b000/i2c-bus@1";
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            camera@10 {
+                compatible = "samsung,s5k3m5";
+                reg = <0x10>;
+                clocks = <190 89>;
+                vio-supply = <195>;
+                vana-supply = <242>;
+                vdig-supply = <197>;
+                reset-gpios = <82 23 1>;
+                enable-gpios = <82 29 0>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&aux_mclk3>;
+                orientation = <1>;
+                rotation = <90>;
+                port { aux_tele: endpoint {
+                    bus-type = <4>;
+                    
+                    data-lanes = <0 1 2 3>;
+                    link-frequencies = /bits/ 64 <723210000>;
+                    remote-endpoint = <&aux_phy3>;
+                }; };
+            };
+            camera@2d {
+                compatible = "samsung,s5k3t1";
+                reg = <0x2d>;
+                clocks = <190 87>;
+                vio-supply = <195>;
+                vana-supply = <242>;
+                vdig-supply = <197>;
+                reset-gpios = <82 54 1>;
+                enable-gpios = <82 118 0>;
+                pinctrl-names = "default";
+                pinctrl-0 = <&aux_mclk2>;
+                orientation = <0>;
+                rotation = <270>;
+                port { aux_front: endpoint {
+                    bus-type = <4>;
+                    
+                    data-lanes = <0 1 2 3>;
+                    link-frequencies = /bits/ 64 <547000000>;
+                    remote-endpoint = <&aux_phy2>;
+                }; };
+            };
+        };
+    };
+    fragment@3 {
+        target-path = "/soc@0/camss@acb3000/ports";
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            port@0 { reg = <0>; aux_phy0: endpoint { bus-type=<4>;  data-lanes=<0 1 2 3>; remote-endpoint=<&aux_wide>; }; };
+            port@2 { reg = <2>; aux_phy2: endpoint { bus-type=<4>;  data-lanes=<0 1 2 3>; remote-endpoint=<&aux_front>; }; };
+            port@3 { reg = <3>; aux_phy3: endpoint { bus-type=<4>;  data-lanes=<0 1 2 3>; remote-endpoint=<&aux_tele>; }; };
+        };
+    };
+};

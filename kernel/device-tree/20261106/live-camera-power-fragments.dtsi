@@ -1,0 +1,132 @@
+/* Extracted from the running phone on 2026-11-06. Reference fragments.
+ * Numeric phandles refer to this exact device tree. Not a standalone DTS.
+ * No lens-focus / VCM node currently exists.
+ */
+
+/* PATH: /soc@0/cci@ac4a000/i2c-bus@1/camera@1a */
+				camera@1a {
+					power-domains = <0xbe 0x00>;
+					pinctrl-names = "default", "sleep";
+					pinctrl-0 = <0xc6 0xc7>;
+					assigned-clocks = <0xbe 0x55>;
+					vana-supply = <0xc4>;
+					assigned-clock-rates = <0x124f800>;
+					clocks = <0xbe 0x55>;
+					rotation = <0x5a>;
+					vdig-supply = <0xc5>;
+					reset-gpios = <0x52 0x1e 0x01>;
+					compatible = "sony,imx586";
+					pinctrl-1 = <0xc8>;
+					vdig-gpios = <0x52 0x3b 0x00>;
+					orientation = <0x01>;
+					reg = <0x1a>;
+					vio-supply = <0xc3>;
+
+					port {
+
+						endpoint {
+							data-lanes = <0x00 0x01 0x02>;
+							remote-endpoint = <0xc9>;
+							bus-type = <0x01>;
+							phandle = <0xd0>;
+							link-frequencies = <0x00 0x29a0acb9>;
+						};
+					};
+				};
+
+/* PATH: /gpio-regulator-1 */
+	gpio-regulator-1 {
+		regulator-max-microvolt = <0x2ab980>;
+		regulator-boot-on;
+		gpio = <0x52 0x18 0x00>;
+		regulator-enable-ramp-delay = <0x87>;
+		regulator-always-on;
+		enable-active-high;
+		regulator-min-microvolt = <0x2ab980>;
+		regulator-name = "actuator_rear_regulator";
+		compatible = "regulator-fixed";
+		vin-supply = <0xf0>;
+	};
+
+/* PATH: /soc@0/rsc@18200000/pm8150-rpmh-regulators/ldo17 */
+				ldo17 {
+					regulator-max-microvolt = <0x2de600>;
+					regulator-boot-on;
+					regulator-always-on;
+					regulator-min-microvolt = <0x2b9440>;
+					regulator-name = "pm8150_l17a_3p0";
+					regulator-initial-mode = <0x03>;
+					phandle = <0xc5>;
+				};
+
+/* PATH: /soc@0/rsc@18200000/pm8150-rpmh-regulators/smps5 */
+				smps5 {
+					regulator-max-microvolt = <0x1f20c0>;
+					regulator-min-microvolt = <0x1d0d80>;
+					regulator-name = "pm8150_s5a_0p6";
+					regulator-initial-mode = <0x03>;
+					phandle = <0xc4>;
+				};
+
+/* PATH: /soc@0/rsc@18200000/pm8150l-rpmh-regulators/bob */
+				bob {
+					regulator-max-microvolt = <0x3d0900>;
+					regulator-min-microvolt = <0x331df0>;
+					regulator-name = "pm8150l_bob";
+					regulator-initial-mode = <0x02>;
+					phandle = <0xf2>;
+					regulator-allow-bypass;
+				};
+
+/* PATH: /soc@0/pinctrl@3100000/cam0-default-state */
+			cam0-default-state {
+				function = "gpio";
+				pins = "gpio30", "gpio59";
+				drive-strength = <0x02>;
+				bias-disable;
+				phandle = <0xc7>;
+			};
+
+/* PATH: /soc@0/pinctrl@3100000/cam0-sleep-state */
+			cam0-sleep-state {
+				function = "gpio";
+				pins = "gpio30", "gpio59";
+				drive-strength = <0x02>;
+				bias-pull-down;
+				phandle = <0xc8>;
+				output-low;
+			};
+
+/* PATH: /soc@0/pinctrl@3100000/cam-mclk0-default-state */
+			cam-mclk0-default-state {
+				function = "cam_mclk";
+				pins = "gpio14";
+				drive-strength = <0x04>;
+				bias-disable;
+				phandle = <0xc6>;
+			};
+
+/* PATH: /gpio-regulator-0 */
+	gpio-regulator-0 {
+		regulator-max-microvolt = <0x1b7740>;
+		regulator-boot-on;
+		gpio = <0x52 0x84 0x00>;
+		regulator-enable-ramp-delay = <0x87>;
+		regulator-always-on;
+		enable-active-high;
+		regulator-min-microvolt = <0x1b7740>;
+		regulator-name = "camera_viodd_ldo";
+		compatible = "regulator-fixed";
+		phandle = <0xc3>;
+		vin-supply = <0x69>;
+	};
+
+/* PATH: /vph-pwr-regulator */
+	vph-pwr-regulator {
+		regulator-max-microvolt = <0x387520>;
+		regulator-min-microvolt = <0x387520>;
+		regulator-name = "vph_pwr";
+		compatible = "regulator-fixed";
+		phandle = <0xf0>;
+	};
+

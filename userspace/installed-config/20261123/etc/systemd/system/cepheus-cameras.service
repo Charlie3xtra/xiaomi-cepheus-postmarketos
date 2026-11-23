@@ -1,0 +1,13 @@
+[Unit]
+Description=Restore Xiaomi Mi 9 auxiliary cameras
+After=systemd-udev-trigger.service
+Before=graphical.target
+ConditionPathExists=/lib/modules/6.17.0-sm8150/extra/cepheus_overlay.ko
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/cepheus-cameras-start
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+{
+  "checked": "2026-11-23",
+  "method": "USB SSH read-only identity and source recovery",
+  "device": "xiaomi-cepheus",
+  "kernel": "6.17.0-sm8150 #8 SMP PREEMPT Mon Nov 2 17:26:29 CST 2026 aarch64",
+  "camss_sha256": "d997de3ba47d155e1c9e340e155c2d526e96f624c4842cf2377304d3f85cc96b",
+  "libcamera_sha256": "eb9d530cf431cb5f3267db89d9fe924f3097d283652b0ed7d992401e02763d17",
+  "config_sha256": "a823dbb4b67d87fc4dff4fa4b479c00cf2b7d83bb40592e87fe4e42570b848dc",
+  "stream_tests_rerun_today": false
+}

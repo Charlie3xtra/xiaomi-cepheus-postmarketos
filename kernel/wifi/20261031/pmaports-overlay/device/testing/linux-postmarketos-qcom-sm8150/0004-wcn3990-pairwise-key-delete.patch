@@ -1,0 +1,62 @@
+Subject: [LOCAL CANDIDATE] wifi: ath10k: skip unacknowledged WCN3990 pairwise key deletion wait
+
+Base: linux-v6.17.0-sm8150, matching the cached postmarketOS
+6.17.0-r2 source archive.
+Based on David Heidelberg's RFC discussion:
+https://lkml.rescloud.iu.edu/hypermail/linux/kernel/2609.2/06093.html
+
+This local variant enables the quirk for WCN3990 only. Other hardware,
+SET_KEY,
+group-key operations and transport errors retain their existing
+handling.
+WMI_KEY_PAIRWISE is zero; pairwise is selected by absence of
+WMI_KEY_GROUP.
+
+Validated by cross-compilation and isolated tests of the actual C
+function.
+Not yet validated with this firmware on device; not installed on the
+phone.
+No upstream acceptance or sign-off is asserted.
+---
+diff --git a/drivers/net/wireless/ath/ath10k/hw.h b/drivers/net/wireless/ath/ath10k/hw.h
+--- a/drivers/net/wireless/ath/ath10k/hw.h
++++ b/drivers/net/wireless/ath/ath10k/hw.h
+@@ -638,6 +638,9 @@
+ 
+ 	/* The hardware support multicast frame registrations */
+ 	bool mcast_frame_registration;
++
++	/* WCN3990 does not acknowledge pairwise key removal over HTT. */
++	bool no_pairwise_key_del_ind;
+ };
+ 
+ struct htt_resp;
+diff --git a/drivers/net/wireless/ath/ath10k/core.c b/drivers/net/wireless/ath/ath10k/core.c
+--- a/drivers/net/wireless/ath/ath10k/core.c
++++ b/drivers/net/wireless/ath/ath10k/core.c
+@@ -716,6 +716,7 @@
+ 		.dev_id = 0,
+ 		.bus = ATH10K_BUS_SNOC,
+ 		.name = "wcn3990 hw1.0",
++		.no_pairwise_key_del_ind = true,
+ 		.led_pin = 0,
+ 		.continuous_frag_desc = true,
+ 		.tx_chain_mask = 0x7,
+diff --git a/drivers/net/wireless/ath/ath10k/mac.c b/drivers/net/wireless/ath/ath10k/mac.c
+--- a/drivers/net/wireless/ath/ath10k/mac.c
++++ b/drivers/net/wireless/ath/ath10k/mac.c
+@@ -316,6 +316,14 @@
+ 	ret = ath10k_send_key(arvif, key, cmd, macaddr, flags);
+ 	if (ret)
+ 		return ret;
++
++	/* WCN3990 sends no security indication for a pairwise key deletion.
++	 * Keep waiting for installations and group-key changes: those do
++	 * generate indications and must retain their timeout protection.
++	 */
++	if (cmd == DISABLE_KEY && !(flags & WMI_KEY_GROUP) &&
++	    ar->hw_params.no_pairwise_key_del_ind)
++		return 0;
+ 
+ 	time_left = wait_for_completion_timeout(&ar->install_key_done, 3 * HZ);
+ 	if (time_left == 0)

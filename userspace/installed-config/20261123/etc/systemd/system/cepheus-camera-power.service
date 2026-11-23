@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply stock Xiaomi Mi 9 camera power floor on legacy kernels
+After=systemd-udev-trigger.service
+Before=cepheus-cameras.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/cepheus-camera-power
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

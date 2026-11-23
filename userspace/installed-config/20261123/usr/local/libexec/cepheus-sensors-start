@@ -1,0 +1,39 @@
+#!/bin/sh
+# Candidate boot integration; enable only after camera/SSC coexistence is verified.
+set -eu
+test -d /proc/device-tree/reserved-memory/cepheus-ssc-pool
+test -f /lib/firmware/slpi_cp.mdt
+modprobe cepheus_slpi
+attempt=0
+while test ! -e /dev/fastrpc-sdsp; do
+    sleep 0.2
+    attempt=$((attempt+1))
+    test "$attempt" -lt 40
+done
+dmesg | grep -q 'cepheus sensor heap assigned'
+mkdir -p /var/log/cepheus-sensors
+chmod 750 /var/log/cepheus-sensors
+rc=0
+timeout -k 2 20 hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s \
+    -R /var/lib/cepheus-ssc > /var/log/cepheus-sensors/initialize.log 2>&1 || rc=$?
+test "$rc" -eq 0 || test "$rc" -eq 124
+# Firmware registers SSC sensors asynchronously after the file-service attach.
+# A fresh boot can initially report UNKNOWN while that registration is pending.
+ready=0
+for attempt in $(seq 1 12); do
+    timeout -k 1 3 ssccli --sensor accelerometer --timeout=1 \
+        > /var/log/cepheus-sensors/probe.log 2>&1 || true
+    if grep -q 'Accelerometer sensor measurement:' /var/log/cepheus-sensors/probe.log; then
+        ready=1
+        echo "SSC accelerometer ready on probe $attempt"
+        break
+    fi
+    echo "Waiting for SSC accelerometer registration: probe $attempt"
+    sleep 1
+done
+test "$ready" -eq 1
+udevadm settle
+# Orientation starts after this unit. Do not wait for a restart transaction
+# that also restarts that dependent unit through PartOf=.
+systemctl restart --no-block iio-sensor-proxy
+echo 'Cepheus SSC initialized and acceleration measurement verified'

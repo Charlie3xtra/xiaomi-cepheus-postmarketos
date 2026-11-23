@@ -1,0 +1,340 @@
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -42,6 +42,7 @@
+ 			 bool enableInputMemcpy);
+ 
+ 	void configure(unsigned int yStart, unsigned int yEnd);
++	void resize(const uint8_t *src);
+ 	void process(uint32_t frame, const uint8_t *src, uint8_t *dst);
+ 
+ private:
+@@ -63,6 +64,7 @@
+ 	unsigned int lineBufferIndex_;
+ 	std::vector<uint8_t> lineBuffers_[kMaxLineBuffers];
+ 	bool enableInputMemcpy_;
++	std::vector<uint8_t> resizeScratch_;
+ };
+ 
+ /**
+@@ -646,28 +648,36 @@
+ 	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0)
+ 		return -EINVAL;
+ 
+-	if (stats_->configure(inputCfg, threads_.size()) != 0)
++	if (outputCfgs.size() != 1)
+ 		return -EINVAL;
+-
++	const StreamConfiguration &outputCfg = outputCfgs[0];
++	const char *fullFrame = getenv("LIBCAMERA_SOFTISP_FULL_FOV");
++	fullFrameEnabled_ = !fullFrame || strcmp(fullFrame, "0");
++	StreamConfiguration statsCfg = inputCfg;
++	if (fullFrameEnabled_) {
++		const BayerFormat bayer = BayerFormat::fromPixelFormat(inputCfg.pixelFormat);
++		if (bayer.packing != BayerFormat::Packing::CSI2 || bayer.bitDepth != 10 ||
++		    !isStandardBayerOrder(bayer.order) ||
++		    !fullFrame_.configure(inputCfg.size.width, inputCfg.size.height, inputCfg.stride,
++				  outputCfg.size.width, outputCfg.size.height)) {
++			LOG(Debayer, Error) << "Full-FOV mode requires standard CSI-2 RAW10";
++			return -EINVAL;
++		}
++		fullFrameRaw_.resize(size_t(fullFrame_.stride) * fullFrame_.height);
++		statsCfg.size = Size(fullFrame_.width + 2 * Raw10FullFrame::border, fullFrame_.height);
++		statsCfg.stride = fullFrame_.stride;
++		LOG(Debayer, Info) << "Full-FOV " << inputCfg.size << " -> " << outputCfg.size
++			<< " image=" << fullFrame_.imageWidth << "x" << fullFrame_.imageHeight
++			<< "+" << fullFrame_.imageX << "+" << fullFrame_.imageY;
++	}
++	if (stats_->configure(statsCfg, threads_.size()) != 0)
++		return -EINVAL;
+ 	const Size &statsPatternSize = stats_->patternSize();
+ 	if (inputConfig_.patternSize.width != statsPatternSize.width ||
+-	    inputConfig_.patternSize.height != statsPatternSize.height) {
+-		LOG(Debayer, Error)
+-			<< "mismatching stats and debayer pattern sizes for "
+-			<< inputCfg.pixelFormat.toString();
++	    inputConfig_.patternSize.height != statsPatternSize.height)
+ 		return -EINVAL;
+-	}
+-
+-	inputConfig_.stride = inputCfg.stride;
+-
+-	if (outputCfgs.size() != 1) {
+-		LOG(Debayer, Error)
+-			<< "Unsupported number of output streams: "
+-			<< outputCfgs.size();
+-		return -EINVAL;
+-	}
+-
+-	const StreamConfiguration &outputCfg = outputCfgs[0];
++	inputConfig_.stride = statsCfg.stride;
++
+ 	SizeRange outSizeRange = sizes(inputCfg.pixelFormat, inputCfg.size);
+ 	std::tie(outputConfig_.stride, outputConfig_.frameSize) =
+ 		strideAndFrameSize(outputCfg.pixelFormat, outputCfg.size);
+@@ -696,10 +706,10 @@
+ 	 */
+ 	params_.gamma = 1.0;
+ 
+-	window_.x = ((inputCfg.size.width - outputCfg.size.width) / 2) &
+-		    ~(inputConfig_.patternSize.width - 1);
+-	window_.y = ((inputCfg.size.height - outputCfg.size.height) / 2) &
+-		    ~(inputConfig_.patternSize.height - 1);
++	window_.x = fullFrameEnabled_ ? Raw10FullFrame::border :
++		((inputCfg.size.width - outputCfg.size.width) / 2) & ~(inputConfig_.patternSize.width - 1);
++	window_.y = fullFrameEnabled_ ? 0 :
++		((inputCfg.size.height - outputCfg.size.height) / 2) & ~(inputConfig_.patternSize.height - 1);
+ 	window_.width = outputCfg.size.width;
+ 	window_.height = outputCfg.size.height;
+ 
+@@ -708,7 +718,9 @@
+ 	 * relative to the debayered area since debayering passes only the part of
+ 	 * data to be processed to the stats; see SwStatsCpu::setWindow.
+ 	 */
+-	stats_->setWindow(Rectangle(window_.size()));
++	stats_->setWindow(fullFrameEnabled_ ?
++		Rectangle(fullFrame_.imageX, fullFrame_.imageY, fullFrame_.imageWidth, fullFrame_.imageHeight) :
++		Rectangle(window_.size()));
+ 
+ 	unsigned int yStart = 0;
+ 	unsigned int linesPerThread = (window_.height / threads_.size()) &
+@@ -837,6 +849,15 @@
+  * \param[in] src The source buffer
+  * \param[in] dst The destination buffer
+  */
++void DebayerCpuThread::resize(const uint8_t *src)
++{
++	debayer_->fullFrame_.rows(src, debayer_->fullFrameRaw_.data(), yStart_, yEnd_, resizeScratch_);
++	debayer_->workPendingMutex_.lock();
++	debayer_->workPending_ &= ~(1 << threadIndex_);
++	debayer_->workPendingMutex_.unlock();
++	debayer_->workPendingCv_.notify_one();
++}
++
+ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
+ {
+ 	Rectangle &window = debayer_->window_;
+@@ -1089,6 +1110,22 @@
+ 		return;
+ 	}
+ 
++	const uint8_t *source = in.planes()[0].data();
++	if (fullFrameEnabled_) {
++		{
++			MutexLocker locker(workPendingMutex_);
++			workPending_ = (1 << threads_.size()) - 1;
++		}
++		for (auto &thread : threads_)
++			thread->invokeMethod(&DebayerCpuThread::resize, ConnectionTypeQueued, source);
++		{
++			MutexLocker locker(workPendingMutex_);
++			workPendingCv_.wait(locker, [&]() LIBCAMERA_TSA_REQUIRES(workPendingMutex_) {
++				return workPending_ == 0;
++			});
++		}
++		source = fullFrameRaw_.data();
++	}
+ 	stats_->startFrame(frame);
+ 
+ 	workPendingMutex_.lock();
+@@ -1098,7 +1135,7 @@
+ 	for (auto &thread : threads_)
+ 		thread->invokeMethod(&DebayerCpuThread::process,
+ 				     ConnectionTypeQueued, frame,
+-				     in.planes()[0].data(), out.planes()[0].data());
++				     source, out.planes()[0].data());
+ 
+ 	{
+ 		MutexLocker locker(workPendingMutex_);
+@@ -1107,6 +1144,24 @@
+ 		});
+ 	}
+ 
++	if (fullFrameEnabled_) {
++		const unsigned int bytes = outputConfig_.bpp / 8;
++		for (unsigned int y = 0; y < fullFrame_.height; ++y) {
++			uint8_t *row = out.planes()[0].data() + size_t(y) * outputConfig_.stride;
++			auto black = [&](unsigned int begin, unsigned int end) {
++				for (unsigned int x = begin; x < end; ++x) {
++					std::memset(row + x * bytes, 0, bytes);
++					if (bytes == 4) row[x * bytes + 3] = 255;
++				}
++			};
++			if (y < fullFrame_.imageY || y >= fullFrame_.imageY + fullFrame_.imageHeight)
++				black(0, fullFrame_.width);
++			else {
++				black(0, fullFrame_.imageX);
++				black(fullFrame_.imageX + fullFrame_.imageWidth, fullFrame_.width);
++			}
++		}
++	}
+ 	metadata.planes()[0].bytesused = out.planes()[0].size();
+ 
+ 	dmaSyncers.clear();
+@@ -1145,6 +1200,14 @@
+ {
+ 	Size patternSize = this->patternSize(inputFormat);
+ 	unsigned int borderHeight = patternSize.height;
++	const char *fullFrame = getenv("LIBCAMERA_SOFTISP_FULL_FOV");
++	if (!fullFrame || strcmp(fullFrame, "0")) {
++		const BayerFormat bayer = BayerFormat::fromPixelFormat(inputFormat);
++		if (bayer.packing == BayerFormat::Packing::CSI2 && bayer.bitDepth == 10 &&
++		    isStandardBayerOrder(bayer.order))
++			return SizeRange(Size(4, 2), Size(inputSize.width & ~3U, inputSize.height & ~1U), 4, 2);
++		return {};
++	}
+ 
+ 	if (patternSize.isNull())
+ 		return {};
+--- a/src/libcamera/software_isp/debayer_cpu.h
++++ b/src/libcamera/software_isp/debayer_cpu.h
+@@ -25,6 +25,7 @@
+ #include "libcamera/internal/software_isp/swstats_cpu.h"
+ 
+ #include "debayer.h"
++#include "raw10_full_frame.h"
+ 
+ namespace libcamera {
+ 
+@@ -154,6 +155,9 @@
+ 	debayerFn debayer2_;
+ 	debayerFn debayer3_;
+ 	Rectangle window_;
++	bool fullFrameEnabled_ = false;
++	Raw10FullFrame fullFrame_;
++	std::vector<uint8_t> fullFrameRaw_;
+ 	std::unique_ptr<SwStatsCpu> stats_;
+ 	unsigned int xShift_; /* Offset of 0/1 applied to window_.x */
+ 
+--- /dev/null
++++ b/src/libcamera/software_isp/raw10_full_frame.h
+@@ -0,0 +1,130 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#pragma once
++
++#include <algorithm>
++#include <cstdint>
++#include <cstring>
++#include <vector>
++
++namespace libcamera {
++
++/* Scale the four CFA planes independently, preserving their Bayer order.
++ * Input and output coordinates include the complete active sensor rectangle.
++ * Extra columns supply interpolation neighbours, not a crop of the image.
++ */
++class Raw10FullFrame
++{
++public:
++	struct Axis {
++		unsigned int lo, hi, weight;
++	};
++	unsigned int width = 0, height = 0, stride = 0;
++	unsigned int imageX = 0, imageY = 0, imageWidth = 0, imageHeight = 0;
++	static constexpr unsigned int border = 4;
++
++	bool configure(unsigned int inWidth, unsigned int inHeight, unsigned int inStride,
++		       unsigned int outWidth, unsigned int outHeight)
++	{
++		if (inWidth < 4 || inWidth % 4 || inHeight < 2 || inHeight % 2 ||
++		    inStride < inWidth / 4 * 5 || outWidth < 4 || outWidth % 4 ||
++		    outHeight < 2 || outHeight % 2)
++			return false;
++		inputWidth_ = inWidth;
++		inputStride_ = inStride;
++		width = outWidth;
++		height = outHeight;
++		stride = (width + 2 * border) / 4 * 5;
++		if (uint64_t(width) * inHeight <= uint64_t(height) * inWidth) {
++			imageWidth = width;
++			imageHeight = (uint64_t(width) * inHeight / inWidth) & ~1U;
++		} else {
++			imageHeight = height;
++			imageWidth = (uint64_t(height) * inWidth / inHeight) & ~3U;
++		}
++		if (!imageWidth || !imageHeight)
++			return false;
++		imageX = ((width - imageWidth) / 2) & ~3U;
++		imageY = ((height - imageHeight) / 2) & ~1U;
++		x_ = axis(inWidth / 2, imageWidth / 2);
++		y_ = axis(inHeight / 2, imageHeight / 2);
++		return true;
++	}
++
++	/* yBegin/yEnd are non-overlapping, even row boundaries for the workers. */
++	void rows(const uint8_t *input, uint8_t *output, unsigned int yBegin,
++		  unsigned int yEnd, std::vector<uint8_t> &scratch) const
++	{
++		const unsigned int rowBytes = inputWidth_ / 4 * 5;
++		scratch.resize(4 * rowBytes);
++		for (unsigned int y = yBegin; y < yEnd; y += 2) {
++			uint8_t *dest[2] = { output + size_t(y) * stride,
++					    output + size_t(y + 1) * stride };
++			std::memset(dest[0], 0, 2 * stride);
++			if (y < imageY || y >= imageY + imageHeight)
++				continue;
++			const Axis &ay = y_[(y - imageY) / 2];
++			for (unsigned int p = 0; p < 2; ++p) {
++				std::memcpy(scratch.data() + (2 * p) * rowBytes,
++					    input + size_t(2 * ay.lo + p) * inputStride_, rowBytes);
++				std::memcpy(scratch.data() + (2 * p + 1) * rowBytes,
++					    input + size_t(2 * ay.hi + p) * inputStride_, rowBytes);
++			}
++			for (unsigned int p = 0; p < 2; ++p) {
++				const uint8_t *top = scratch.data() + (2 * p) * rowBytes;
++				const uint8_t *bottom = top + rowBytes;
++				for (unsigned int x = 0; x < imageWidth; x += 4) {
++					uint16_t v[4];
++					for (unsigned int k = 0; k < 4; ++k) {
++						const Axis &ax = x_[(x + k) / 2];
++						const unsigned int phase = k & 1;
++						unsigned int a = blend(sample(top, 2 * ax.lo + phase),
++								       sample(top, 2 * ax.hi + phase), ax.weight);
++						unsigned int b = blend(sample(bottom, 2 * ax.lo + phase),
++								       sample(bottom, 2 * ax.hi + phase), ax.weight);
++						v[k] = blend(a, b, ay.weight);
++					}
++					pack(dest[p] + (border + imageX + x) / 4 * 5, v);
++				}
++				/* Replicate a complete CFA group at horizontal boundaries. */
++				std::memcpy(dest[p], dest[p] + 5, 5);
++				std::memcpy(dest[p] + stride - 5, dest[p] + stride - 10, 5);
++			}
++		}
++	}
++
++	static uint16_t sample(const uint8_t *row, unsigned int x)
++	{
++		const uint8_t *p = row + (x / 4) * 5;
++		return (uint16_t(p[x % 4]) << 2) | ((p[4] >> (2 * (x % 4))) & 3);
++	}
++
++	static void pack(uint8_t *p, const uint16_t v[4])
++	{
++		p[4] = 0;
++		for (unsigned int k = 0; k < 4; ++k) {
++			p[k] = v[k] >> 2;
++			p[4] |= (v[k] & 3) << (2 * k);
++		}
++	}
++
++private:
++	static unsigned int blend(unsigned int a, unsigned int b, unsigned int weight)
++	{
++		return (a * (65536 - weight) + b * weight + 32768) >> 16;
++	}
++	static std::vector<Axis> axis(unsigned int input, unsigned int output)
++	{
++		std::vector<Axis> map(output);
++		for (unsigned int i = 0; i < output; ++i) {
++			/* Align plane endpoints so every edge of the sensor is retained. */
++			uint64_t at = output > 1 ? uint64_t(i) * (input - 1) * 65536 / (output - 1) : 0;
++			map[i] = { unsigned(at >> 16), std::min(unsigned(at >> 16) + 1, input - 1),
++				   unsigned(at & 65535) };
++		}
++		return map;
++	}
++	unsigned int inputWidth_ = 0, inputStride_ = 0;
++	std::vector<Axis> x_, y_;
++};
++
++} /* namespace libcamera */

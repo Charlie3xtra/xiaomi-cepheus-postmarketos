@@ -1,0 +1,11 @@
+[Unit]
+Description=Hold tele actuator rail (GPIO152) enabled for AK7374 autofocus
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/gpioset --daemonize --chip /dev/gpiochip3 152=1
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

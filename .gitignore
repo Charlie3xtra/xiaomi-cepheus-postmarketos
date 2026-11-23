@@ -1,0 +1,19 @@
+# Device-specific and generated artifacts
+*.ko
+*.o
+*.mod.c
+*.dtb
+*.dtbo
+*.img
+*.raw
+*.jpg
+*.jpeg
+*.png
+*.so
+*.so.*
+__pycache__/
+*.pyc
+.env
+*askpass*
+*eeprom*
+*persist-dump*

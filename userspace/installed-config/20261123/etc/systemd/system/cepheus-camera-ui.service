@@ -1,0 +1,18 @@
+[Unit]
+Description=Standalone Mi 9 camera on the phone display
+Requires=cepheus-cameras.service cepheus-camera-seat.service
+After=cepheus-cameras.service cepheus-camera-seat.service
+
+[Service]
+Type=simple
+RuntimeDirectory=cepheus-camera
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/cepheus-camera
+Environment=LIBSEAT_BACKEND=seatd
+Environment=QT_QPA_PLATFORM=wayland
+Environment=QT_QUICK_BACKEND=software
+Environment=CEPHEUS_CAMERA=main
+EnvironmentFile=-/etc/default/cepheus-camera
+ExecStart=/usr/bin/weston -B drm --renderer=pixman --shell=kiosk --socket=wayland-camera --no-config --idle-time=0 -- /usr/local/bin/cepheus-qcam ${CEPHEUS_CAMERA}
+KillSignal=SIGINT
+TimeoutStopSec=10
