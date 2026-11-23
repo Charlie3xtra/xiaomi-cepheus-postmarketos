@@ -1,0 +1,17 @@
+{
+  "original_head": "13caddd41289c63df0cdeeb41fee722cf6947051",
+  "baseline_worktree_tree": "300b4559681a305af9149e8da9747d43c8bbe6a5",
+  "tracked_source_changes_from_final_8": [
+    "drivers/gpu/drm/msm/dsi/dsi_host.c",
+    "drivers/gpu/drm/msm/msm_fbdev.c"
+  ],
+  "config_sha256": "a823dbb4b67d87fc4dff4fa4b479c00cf2b7d83bb40592e87fe4e42570b848dc",
+  "module_vermagic": "6.17.0-sm8150 SMP preempt mod_unload aarch64",
+  "checkpatch": {
+    "module": "0 errors, 0 warnings",
+    "diagnostic_diff_no_signoff": "0 errors, 0 warnings"
+  },
+  "phone_tested": false,
+  "raw_image_sha256": "a8f4c840badbfb92eff539b8601e196680c8e9c49a7dd5693c8fb1e0a950c277",
+  "compiler": "aarch64-linux-gnu-gcc Debian 14.2.0-19; GNU ld 2.44"
+}

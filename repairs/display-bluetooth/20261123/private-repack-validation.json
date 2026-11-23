@@ -1,0 +1,21 @@
+{
+  "not_published": true,
+  "ramdisk_and_header_preserved_except_kernel_size_and_id": true,
+  "candidates": [
+    {
+      "name": "qup0-only.dtb",
+      "bytes": 106141,
+      "sha256": "5b17c0060df11a32a0b1823376bf99721cf7a8c57b4ef3fe5179a59dbeb6dcec"
+    },
+    {
+      "name": "boot-8-qup0.img",
+      "bytes": 25145344,
+      "sha256": "1e10001bcc23be7cf222d4361f8f195307e4555526e607f541fb718549dbdb0d"
+    },
+    {
+      "name": "boot-9-display-diag-qup0.img",
+      "bytes": 25141248,
+      "sha256": "00dc457221b10ed3817824e20ebccdae02521932ccebe93ca7c3b13657a91517"
+    }
+  ]
+}
