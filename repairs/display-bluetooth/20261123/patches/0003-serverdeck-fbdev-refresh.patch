@@ -1,0 +1,74 @@
+--- a/agent.py
++++ b/agent.py
+@@ -1,7 +1,6 @@
+ #!/usr/bin/env python3
+ import fcntl
+ import json
+-import mmap
+ import os
+ from pathlib import Path
+ import select
+@@ -120,18 +119,30 @@
+         self.format = 'BGRX' if red == 16 else 'RGBX'
+         self.stride = int(Path('/sys/class/graphics/fb0/stride').read_text())
+         virtual_height = int(Path('/sys/class/graphics/fb0/virtual_size').read_text().split(',')[1])
+-        self.memory = mmap.mmap(self.fd, self.stride * virtual_height)
++        if self.xoffset != 0 or self.width * 4 > self.stride or self.yoffset + self.height > virtual_height:
++            raise RuntimeError('Unsupported framebuffer geometry')
+         self.backlight = next((x / 'brightness' for x in Path('/sys/class/backlight').glob('*')), None)
+         self.brightness = 70
+         self.tty = os.open('/dev/tty1', os.O_RDWR | os.O_NOCTTY)
+         fcntl.ioctl(self.tty, 0x4b3a, 1)  # KD_GRAPHICS: console text cannot replace this screen.
+ 
+     def draw(self, image):
++        if image.size != (self.width, self.height):
++            raise ValueError('Image size must match the framebuffer')
+         raw = image.tobytes('raw', self.format)
+         row = self.width * 4
++        # fb_write also reports damage to DRM; a GEM mmap write does not.
++        frame = bytearray(self.stride * self.height)
+         for y in range(self.height):
+-            offset = (y + self.yoffset) * self.stride + self.xoffset * 4
+-            self.memory[offset:offset + row] = raw[y * row:(y + 1) * row]
++            frame[y * self.stride:y * self.stride + row] = raw[y * row:(y + 1) * row]
++        data = memoryview(frame)
++        offset = self.yoffset * self.stride
++        while data:
++            count = os.pwrite(self.fd, data, offset)
++            if count <= 0:
++                raise OSError('Framebuffer write made no progress')
++            offset += count
++            data = data[count:]
+ 
+     def blank(self, value):
+         if value:
+@@ -141,8 +152,6 @@
+             fcntl.ioctl(self.fd, 0x4611, 4 if value else 0)
+         except OSError:
+             pass
+-        if not value:
+-            self.set_brightness(self.brightness)
+ 
+     def set_brightness(self, value):
+         try:
+@@ -268,12 +277,17 @@
+             with LOCK:
+                 awake = AWAKE_UNTIL > now
+                 status = dict(STATE)
++            if awake and not was_awake:
++                # Power the panel first, then replace stale pixels while dark.
++                framebuffer.blank(False)
+             if awake and (not was_awake or now - last_frame >= 3):
+                 framebuffer.draw(render(status, framebuffer.width, framebuffer.height))
+                 last_frame = now
+-            if awake != was_awake:
+-                framebuffer.blank(not awake)
+-                was_awake = awake
++                if not was_awake:
++                    framebuffer.set_brightness(framebuffer.brightness)
++            if not awake and was_awake:
++                framebuffer.blank(True)
++            was_awake = awake
+     finally:
+         framebuffer.blank(True)
+         fcntl.ioctl(power, 0x40044590, 0)
