@@ -19,6 +19,7 @@
 				vddrf-supply = <0x46>;
 				vddch0-supply = <0x47>;
 				max-speed = <3200000>;
+				firmware-name = "cepheus-crnv21", "cepheus-crbtfw21.tlv";
 			};
 		};
 	};

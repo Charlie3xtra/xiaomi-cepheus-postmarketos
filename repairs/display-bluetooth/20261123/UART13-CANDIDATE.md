@@ -1,3 +1,5 @@
+> Current artifacts/cepheus_uart13.ko now includes the explicit revision21 firmware-name list. Read UART13-FIRMWARE-CANDIDATE.md and uart13-firmware-validation.json first. This new artifact has not been loaded or tested. The shared route/guards below remain unchanged; older route-only static validation is historical.
+
 # Review candidate: vendor-routed UART13
 
 Prepared only; **not loaded, no working Bluetooth claim**. Review BLUETOOTH-UART-FINDINGS.md first. The original QUP0-only experiment is superseded for Bluetooth routing.

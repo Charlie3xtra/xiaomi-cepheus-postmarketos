@@ -1,0 +1,19 @@
+{
+  "candidate_sha256": "180ead71760151df6ab8dd89f8ae7acea962e1482786d6be6d26e58472613f19",
+  "baseline_sha256": "a46645a88482f8a4a8ca5f04de18048e3267401c121218425d2ebb2b4a3b429e",
+  "node_count_before": 890,
+  "node_count_after": 891,
+  "memreserve_unchanged": true,
+  "exact_whitelist_pass": true,
+  "guard_c_source_unchanged": true,
+  "new_property": {
+    "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+    "firmware-name": [
+      "cepheus-crnv21",
+      "cepheus-crbtfw21.tlv"
+    ]
+  },
+  "module_sha256": "98db0f4a51728b9b8fe8268012aeb22c782ed2126453ed4a7cb57b9a39300075",
+  "hardware_tested": false,
+  "note": "This filename-explicit candidate has not been loaded; reports of route-only diagnostics do not validate this artifact."
+}
