@@ -6,5 +6,9 @@
   "camss_sha256": "d997de3ba47d155e1c9e340e155c2d526e96f624c4842cf2377304d3f85cc96b",
   "libcamera_sha256": "eb9d530cf431cb5f3267db89d9fe924f3097d283652b0ed7d992401e02763d17",
   "config_sha256": "a823dbb4b67d87fc4dff4fa4b479c00cf2b7d83bb40592e87fe4e42570b848dc",
-  "stream_tests_rerun_today": false
+  "stream_tests_rerun_today": false,
+  "boot_kernel_read": "Read-only boot v0 kernel payload, ramdisk not read",
+  "boot_kernel_raw_sha256": "b7b92e2053c3c782d70a5ce7f1848015c826a62b3db6ff42beae102577844421",
+  "boot_kernel_gzip_sha256": "71bd7461194398b0192dba4d7836154ece89be606dea68849746d61476b9e506",
+  "boot_kernel_gzip_bytes": 12956799
 }

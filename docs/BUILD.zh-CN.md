@@ -1,6 +1,6 @@
 # 构建和取流
 
-这是已恢复源码的复核说明，尚非完整最终内核发布配方。请先看 PROVENANCE.md；同一个版本字符串不能替代 ABI、配置和 Module.symvers 匹配。
+这是项目构建和取流入口。最终 #8 内核的固定源码基线、完整补丁、配置和外置模块构建说明见 kernel/recovered-final/20261123/README.md；请先看 PROVENANCE.md，同一个版本字符串不能替代 ABI、配置和 Module.symvers 匹配。
 
 ## Sensor 模块
 
@@ -42,7 +42,7 @@ make-ssc-pool-boot.py 和 prepare-nominal-dtb.py 是历史配方副本，依赖�
 
 ## libcamera 和应用
 
-原版本为 libcamera 0.7.2，安装前缀 /opt/cepheus-camera。20261123 目录从手机实际构建树恢复软件 ISP、simple pipeline、simple IPA、sensor helper/properties 等代码；20261106 另有全视野补丁。后者不是针对干净上游的独立全套补丁，不要重复应用到已经包含此改动的 20261123 快照。完整基线/本地差异仍需核对。
+原版本为 libcamera 0.7.2，安装前缀 /opt/cepheus-camera。20261123 目录从手机实际构建树恢复软件 ISP、simple pipeline、simple IPA、sensor helper/properties 等代码；20261106 另有全视野补丁。后者不是针对干净上游的独立全套补丁，不要重复应用到已经包含此改动的 20261123 快照。11 月 23 日已对照完整上游归档重建全部相关差异，可直接使用 [v0.7.2 完整补丁](../userspace/libcamera/patches/README.md)，不要重复应用历史补丁。
 
 Snapshot 使用 userspace/installed-config/20261123 中的启动环境；方向 shim 源码为 userspace/integration/20261106/snapshot-orientation.c，重建示例：
 

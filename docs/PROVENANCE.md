@@ -1,35 +1,32 @@
-# Source provenance and recovery gaps
+# Source provenance and version relationships
 
-Publication assembled 2026-11-23 from explicitly selected source archives and the 2026-11-06 handoff. Per-file SHA-256 and archive provenance are recorded in SOURCES.json. Generated modules, personal media, device logs containing identifiers, boot partition dumps, EEPROM/persist and proprietary firmware are excluded.
+Assembled 2026-11-23 from selected local archives, the 2026-11-06 source handoff, the current phone build tree and the original WSL build environment. SOURCES.json records repository-file SHA-256 and origins; kernel/recovered-final/20261123/SOURCE-MANIFEST.json is the kernel export's own manifest. Original SPDX/copyright notices are retained.
 
-## Recovered
+## Final kernel and external modules
 
-- kernel/snapshots/20261102: historical CAMSS stripe-fix snapshot, sensor sources and early board DTS. Most files contain existing upstream code; this is not a claim of new authorship of the complete files.
-- kernel/snapshots/20261106/drivers: complete four-camera sensor source handoff. Sensor source hashes match the earlier quality archive; this handoff also documents comparison with the installed modules on that date.
-- kernel/device-tree/20261106: auxiliary overlay and selected live camera/power fragments. Numeric phandles are tied to that exact tree. The fragments are not a complete standalone board DTS.
-- userspace/libcamera/snapshots/20261106: sensor helper/properties, RAW10 full-field helper and patch. The patch is relative to a locally modified libcamera tree, not guaranteed to apply to pristine upstream by itself.
-- userspace/integration/20261106: Snapshot copy/orientation interposition source, launch wrappers and orientation bridge. Full service/firmware setup is not included in this handoff.
-- tools/autofocus: 2026-11-07 corrected telephoto AF C++ source derived from the local ZCode prototype. Documentation comments are corrected during publication; algorithm and access guard retained.
-- kernel/wifi/20261031: historical candidate ath10k patch and package recipe. The candidate was build/control-flow tested at the time, not established as the deployed final Wi-Fi/5GHz fix.
+See [the recovered kernel documentation](../kernel/recovered-final/20261123/README.md). The fixed v6.17.0-sm8150 archive (90,562 files) matches local root bdec564f41064359aa4e2f4cd9993c4badb9b7a7. Two complete patches reproduce local head 13caddd41289c63df0cdeeb41fee722cf6947051 plus its Image #8 worktree changes. Final external CAMSS v3 and sensor FastRPC sources/patches are provided separately because they postdate that Image's in-tree CAMSS.
 
-## Missing / not yet independently matched
+The recovered .config is byte-identical to the phone's /proc/config.gz extraction. The published pure gzip kernel is byte-identical to the phone's current boot kernel payload (SHA-256 71bd7461194398b0192dba4d7836154ece89be606dea68849746d61476b9e506). The retained final CAMSS module reference also matches the phone (d997de3ba47d155e1c9e340e155c2d526e96f624c4842cf2377304d3f85cc96b).
 
-- Complete source, base commit and patch series for Linux 6.17.0-sm8150 #8.
-- Final CAMSS v3 used for the later stream/switch/idle tests; the Nov 2 snapshot predates those fixes.
-- Exact final GPU backport/build tree and FastRPC/SSC module source. The original upstream GPU fix is archived under kernel/upstream-references; it is not a newly authored patch.
-- Full final display/touch/Bluetooth/Wi-Fi diff series and any per-device firmware packaging.
-- Fully audited base/diff for the latest ZCode libcamera rebuild. The current software-ISP/simple-pipeline/IPA/helper files have now been recovered from its device build tree, together with installed startup services.
+Archive-to-root, committed tree, dirty worktree files, final external module sources and recompiled static DTS property/reservation comparisons all passed. This establishes recovered source/artifact provenance, not a fresh clean-room byte-for-byte kernel build. The old APKBUILD is retained as historical packaging provenance; the actual #8 build used GCC 14.2 and differs from that historical LLVM recipe.
 
-No compiled kernel is released under a claim that the recovered fragments alone are its complete corresponding source. The local state backup contains /boot files, but /boot/boot.img was already known to be stale; it must not be promoted to the verified final image.
+Display/touch/Bluetooth support includes existing upstream drivers and final board configuration. No separate newly authored final driver patch was found for each feature; do not claim otherwise.
 
-## Historical identity references (not downloadable artifacts)
+## Camera and userspace
 
-Verified installed boot-gpu-ssc-nominal.img: 25,145,344 bytes; SHA-256 74653da854b14450e199091e396c7a02cc6e8b09720c7e8d818fd92fd5bae07f.
+- kernel/snapshots/20261106/drivers: complete sensor source handoff, compared with installed modules at the time. Sensor modules are separate from the userspace telephoto AF utility.
+- kernel/device-tree/20261106: auxiliary runtime overlay and selected live power fragments. Numeric phandles only fit that tree; fragments are not a standalone board DTS.
+- userspace/libcamera/patches: current device source compared with official v0.7.2, commit 191e202178f02430b5942397c70d215cdd2056fa. All 1,483 upstream regular files were compared; five source files differ. The feature patch also adds the RAW10 helper and five YAML files. Apply to the pristine archive reconstructed all 11 changed/added files successfully.
+- userspace/libcamera/snapshots/20261123: software ISP, simple pipeline/IPA/helper/property source recovered from the current device build tree. Downloaded third-party subprojects are not treated as local modifications.
+- userspace/integration/20261106 and userspace/installed-config/20261123: Snapshot copy/orientation shim source and current startup/udev configuration.
+- tools/autofocus: Nov 7 corrected telephoto one-shot AF C++ prototype. Documentation comments corrected for publication; algorithm/access guard retained.
 
-Final CAMSS v3 module reference: SHA-256 d997de3ba47d155e1c9e340e155c2d526e96f624c4842cf2377304d3f85cc96b.
+## Historical material
 
-These hashes identify earlier verification records; they are not a substitute for recovering the matching sources or auditing a new device dump before publication.
+20261102 CAMSS, board DTS and integration directories precede the final switching/PM fixes and are explicitly historical. kernel/wifi/20261031 contains the earlier candidate and tests; the actual final #8 Wi-Fi delta is in recovered-final and must not be double-applied. The old patches remain useful records, not additional steps to apply indiscriminately.
 
-## Read-only check on 2026-11-23
+## Publication boundaries
 
-USB SSH confirmed Linux 6.17.0-sm8150 #8; installed CAMSS and libcamera hashes still match the Nov 7 recorded state. The current kernel configuration was read from /proc/config.gz and archived under kernel/configs. This is an identity check, not a fresh stream/stress test. Additional current libcamera source files and startup/udev configuration are under the dated 20261123 directories.
+The original boot dump/ramdisk has per-device content and remains private. No device firmware, EEPROM/persist calibration, user keys, credentials, personal photos or raw private logs were published. The unchanged upstream Linux archive includes canonical public selftest key fixtures, not user credentials.
+
+Historical boot reference SHA-256 74653da854b14450e199091e396c7a02cc6e8b09720c7e8d818fd92fd5bae07f is an identity reference, not a downloadable full boot image. /boot/boot.img was known to be stale and was not used as the final publication baseline.

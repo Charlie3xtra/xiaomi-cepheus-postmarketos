@@ -1,0 +1,625 @@
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -642,6 +642,32 @@
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("imx477", CameraSensorHelperImx477)
+ 
++class CameraSensorHelperImx481 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx481()
++	{
++		/* The sensor reports a 64-code pedestal in its 10-bit samples. */
++		blackLevel_ = 4096;
++		/* Sony: gain = 1024 / (1024 - register code). */
++		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx481", CameraSensorHelperImx481)
++
++class CameraSensorHelperImx586 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx586()
++	{
++		/* The sensor reports a 64-code pedestal in its 10-bit samples. */
++		blackLevel_ = 4096;
++		/* Sony: gain = 1024 / (1024 - register code). */
++		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx586", CameraSensorHelperImx586)
++
+ class CameraSensorHelperImx678 : public CameraSensorHelper
+ {
+ public:
+@@ -827,6 +853,30 @@
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("ov13858", CameraSensorHelperOv13858)
+ 
++class CameraSensorHelperS5k3m5 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperS5k3m5()
++	{
++		/* The sensor reports a 64-code pedestal in its 10-bit samples. */
++		blackLevel_ = 4096;
++		/* The V4L2 control reports the gain multiplier directly. */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k3m5", CameraSensorHelperS5k3m5)
++
++class CameraSensorHelperS5k3t1 : public CameraSensorHelper
++{
++public:
++    CameraSensorHelperS5k3t1()
++    {
++        blackLevel_ = 4096;
++        gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++    }
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k3t1", CameraSensorHelperS5k3t1)
++
+ class CameraSensorHelperVd55g1 : public CameraSensorHelper
+ {
+ public:
+--- a/src/libcamera/sensor/camera_sensor_properties.cpp
++++ b/src/libcamera/sensor/camera_sensor_properties.cpp
+@@ -291,6 +291,26 @@
+ 				.hblankDelay = 3
+ 			},
+ 		} },
++		{ "imx481", {
++			.unitCellSize = { 1000, 1000 },
++			.testPatternModes = {},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
++		{ "imx586", {
++			.unitCellSize = { 800, 800 },
++			.testPatternModes = {},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 2,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "imx519", {
+ 			.unitCellSize = { 1220, 1220 },
+ 			.testPatternModes = {
+@@ -503,6 +523,22 @@
+ 			},
+ 			.sensorDelays = { },
+ 		} },
++		{ "s5k3m5", {
++			.unitCellSize = { 1000, 1000 },
++			.testPatternModes = {
++				{ controls::draft::TestPatternModeOff, 0 },
++				{ controls::draft::TestPatternModeSolidColor, 1 },
++				{ controls::draft::TestPatternModeColorBars, 2 },
++				{ controls::draft::TestPatternModeColorBarsFadeToGray, 3 },
++				{ controls::draft::TestPatternModePn9, 4 },
++			},
++			.sensorDelays = {
++				.exposureDelay = 2,
++				.gainDelay = 1,
++				.vblankDelay = 2,
++				.hblankDelay = 2
++			},
++		} },
+ 		{ "vd55g1", {
+ 			.unitCellSize = { 2160, 2160 },
+ 			.testPatternModes = {
+--- a/src/libcamera/software_isp/debayer_cpu.cpp
++++ b/src/libcamera/software_isp/debayer_cpu.cpp
+@@ -42,6 +42,7 @@
+ 			 bool enableInputMemcpy);
+ 
+ 	void configure(unsigned int yStart, unsigned int yEnd);
++	void resize(const uint8_t *src);
+ 	void process(uint32_t frame, const uint8_t *src, uint8_t *dst);
+ 
+ private:
+@@ -63,6 +64,7 @@
+ 	unsigned int lineBufferIndex_;
+ 	std::vector<uint8_t> lineBuffers_[kMaxLineBuffers];
+ 	bool enableInputMemcpy_;
++	std::vector<uint8_t> resizeScratch_;
+ };
+ 
+ /**
+@@ -646,28 +648,38 @@
+ 	if (getInputConfig(inputCfg.pixelFormat, inputConfig_) != 0)
+ 		return -EINVAL;
+ 
+-	if (stats_->configure(inputCfg, threads_.size()) != 0)
++	if (outputCfgs.size() != 1)
+ 		return -EINVAL;
+-
++	const StreamConfiguration &outputCfg = outputCfgs[0];
++	const char *fullFrame = getenv("LIBCAMERA_SOFTISP_FULL_FOV");
++	fullFrameEnabled_ = !fullFrame || strcmp(fullFrame, "0");
++	if (getenv("LIBCAMERA_AF_NO_FULLFOV"))
++		fullFrameEnabled_ = false;
++	StreamConfiguration statsCfg = inputCfg;
++	if (fullFrameEnabled_) {
++		const BayerFormat bayer = BayerFormat::fromPixelFormat(inputCfg.pixelFormat);
++		if (bayer.packing != BayerFormat::Packing::CSI2 || bayer.bitDepth != 10 ||
++		    !isStandardBayerOrder(bayer.order) ||
++		    !fullFrame_.configure(inputCfg.size.width, inputCfg.size.height, inputCfg.stride,
++				  outputCfg.size.width, outputCfg.size.height)) {
++			LOG(Debayer, Error) << "Full-FOV mode requires standard CSI-2 RAW10";
++			return -EINVAL;
++		}
++		fullFrameRaw_.resize(size_t(fullFrame_.stride) * fullFrame_.height);
++		statsCfg.size = Size(fullFrame_.width + 2 * Raw10FullFrame::border, fullFrame_.height);
++		statsCfg.stride = fullFrame_.stride;
++		LOG(Debayer, Info) << "Full-FOV " << inputCfg.size << " -> " << outputCfg.size
++			<< " image=" << fullFrame_.imageWidth << "x" << fullFrame_.imageHeight
++			<< "+" << fullFrame_.imageX << "+" << fullFrame_.imageY;
++	}
++	if (stats_->configure(statsCfg, threads_.size()) != 0)
++		return -EINVAL;
+ 	const Size &statsPatternSize = stats_->patternSize();
+ 	if (inputConfig_.patternSize.width != statsPatternSize.width ||
+-	    inputConfig_.patternSize.height != statsPatternSize.height) {
+-		LOG(Debayer, Error)
+-			<< "mismatching stats and debayer pattern sizes for "
+-			<< inputCfg.pixelFormat.toString();
++	    inputConfig_.patternSize.height != statsPatternSize.height)
+ 		return -EINVAL;
+-	}
+-
+-	inputConfig_.stride = inputCfg.stride;
+-
+-	if (outputCfgs.size() != 1) {
+-		LOG(Debayer, Error)
+-			<< "Unsupported number of output streams: "
+-			<< outputCfgs.size();
+-		return -EINVAL;
+-	}
+-
+-	const StreamConfiguration &outputCfg = outputCfgs[0];
++	inputConfig_.stride = statsCfg.stride;
++
+ 	SizeRange outSizeRange = sizes(inputCfg.pixelFormat, inputCfg.size);
+ 	std::tie(outputConfig_.stride, outputConfig_.frameSize) =
+ 		strideAndFrameSize(outputCfg.pixelFormat, outputCfg.size);
+@@ -683,6 +695,13 @@
+ 	int ret = setDebayerFunctions(inputCfg.pixelFormat,
+ 				      outputCfg.pixelFormat,
+ 				      ccmEnabled);
++	const char *cfaShift = getenv("LIBCAMERA_CFA_SHIFT");
++	if (cfaShift) {
++		if (strchr(cfaShift, 'x'))
++			xShift_ ^= 1;
++		if (strchr(cfaShift, 'y'))
++			std::swap(debayer0_, debayer1_);
++	}
+ 	if (ret != 0)
+ 		return -EINVAL;
+ 
+@@ -696,10 +715,10 @@
+ 	 */
+ 	params_.gamma = 1.0;
+ 
+-	window_.x = ((inputCfg.size.width - outputCfg.size.width) / 2) &
+-		    ~(inputConfig_.patternSize.width - 1);
+-	window_.y = ((inputCfg.size.height - outputCfg.size.height) / 2) &
+-		    ~(inputConfig_.patternSize.height - 1);
++	window_.x = fullFrameEnabled_ ? Raw10FullFrame::border :
++		((inputCfg.size.width - outputCfg.size.width) / 2) & ~(inputConfig_.patternSize.width - 1);
++	window_.y = fullFrameEnabled_ ? 0 :
++		((inputCfg.size.height - outputCfg.size.height) / 2) & ~(inputConfig_.patternSize.height - 1);
+ 	window_.width = outputCfg.size.width;
+ 	window_.height = outputCfg.size.height;
+ 
+@@ -708,7 +727,9 @@
+ 	 * relative to the debayered area since debayering passes only the part of
+ 	 * data to be processed to the stats; see SwStatsCpu::setWindow.
+ 	 */
+-	stats_->setWindow(Rectangle(window_.size()));
++	stats_->setWindow(fullFrameEnabled_ ?
++		Rectangle(fullFrame_.imageX, fullFrame_.imageY, fullFrame_.imageWidth, fullFrame_.imageHeight) :
++		Rectangle(window_.size()));
+ 
+ 	unsigned int yStart = 0;
+ 	unsigned int linesPerThread = (window_.height / threads_.size()) &
+@@ -837,6 +858,15 @@
+  * \param[in] src The source buffer
+  * \param[in] dst The destination buffer
+  */
++void DebayerCpuThread::resize(const uint8_t *src)
++{
++	debayer_->fullFrame_.rows(src, debayer_->fullFrameRaw_.data(), yStart_, yEnd_, resizeScratch_);
++	debayer_->workPendingMutex_.lock();
++	debayer_->workPending_ &= ~(1 << threadIndex_);
++	debayer_->workPendingMutex_.unlock();
++	debayer_->workPendingCv_.notify_one();
++}
++
+ void DebayerCpuThread::process(uint32_t frame, const uint8_t *src, uint8_t *dst)
+ {
+ 	Rectangle &window = debayer_->window_;
+@@ -1038,6 +1068,12 @@
+ 				blue[i].b = std::round(rgb.b() * params.combinedMatrix[blueIndex][2]);
+ 				gammaLut_[i] = gammaTable_[i * gammaTableSize / kRGBLookupSize];
+ 			}
++		if (getenv("LIBCAMERA_AF_GRAY")) {
++			for (unsigned int gi = 0; gi < kRGBLookupSize; gi++) {
++				redCcm_[gi] = greenCcm_[gi];
++				blueCcm_[gi] = greenCcm_[gi];
++			}
++		}
+ 		}
+ 	} else {
+ 		if (gammaUpdateNeeded || params.gains != params_.gains) {
+@@ -1089,6 +1125,22 @@
+ 		return;
+ 	}
+ 
++	const uint8_t *source = in.planes()[0].data();
++	if (fullFrameEnabled_) {
++		{
++			MutexLocker locker(workPendingMutex_);
++			workPending_ = (1 << threads_.size()) - 1;
++		}
++		for (auto &thread : threads_)
++			thread->invokeMethod(&DebayerCpuThread::resize, ConnectionTypeQueued, source);
++		{
++			MutexLocker locker(workPendingMutex_);
++			workPendingCv_.wait(locker, [&]() LIBCAMERA_TSA_REQUIRES(workPendingMutex_) {
++				return workPending_ == 0;
++			});
++		}
++		source = fullFrameRaw_.data();
++	}
+ 	stats_->startFrame(frame);
+ 
+ 	workPendingMutex_.lock();
+@@ -1098,7 +1150,7 @@
+ 	for (auto &thread : threads_)
+ 		thread->invokeMethod(&DebayerCpuThread::process,
+ 				     ConnectionTypeQueued, frame,
+-				     in.planes()[0].data(), out.planes()[0].data());
++				     source, out.planes()[0].data());
+ 
+ 	{
+ 		MutexLocker locker(workPendingMutex_);
+@@ -1107,6 +1159,24 @@
+ 		});
+ 	}
+ 
++	if (fullFrameEnabled_) {
++		const unsigned int bytes = outputConfig_.bpp / 8;
++		for (unsigned int y = 0; y < fullFrame_.height; ++y) {
++			uint8_t *row = out.planes()[0].data() + size_t(y) * outputConfig_.stride;
++			auto black = [&](unsigned int begin, unsigned int end) {
++				for (unsigned int x = begin; x < end; ++x) {
++					std::memset(row + x * bytes, 0, bytes);
++					if (bytes == 4) row[x * bytes + 3] = 255;
++				}
++			};
++			if (y < fullFrame_.imageY || y >= fullFrame_.imageY + fullFrame_.imageHeight)
++				black(0, fullFrame_.width);
++			else {
++				black(0, fullFrame_.imageX);
++				black(fullFrame_.imageX + fullFrame_.imageWidth, fullFrame_.width);
++			}
++		}
++	}
+ 	metadata.planes()[0].bytesused = out.planes()[0].size();
+ 
+ 	dmaSyncers.clear();
+@@ -1145,6 +1215,14 @@
+ {
+ 	Size patternSize = this->patternSize(inputFormat);
+ 	unsigned int borderHeight = patternSize.height;
++	const char *fullFrame = getenv("LIBCAMERA_SOFTISP_FULL_FOV");
++	if (!fullFrame || strcmp(fullFrame, "0")) {
++		const BayerFormat bayer = BayerFormat::fromPixelFormat(inputFormat);
++		if (bayer.packing == BayerFormat::Packing::CSI2 && bayer.bitDepth == 10 &&
++		    isStandardBayerOrder(bayer.order))
++			return SizeRange(Size(4, 2), Size(inputSize.width & ~3U, inputSize.height & ~1U), 4, 2);
++		return {};
++	}
+ 
+ 	if (patternSize.isNull())
+ 		return {};
+--- a/src/libcamera/software_isp/debayer_cpu.h
++++ b/src/libcamera/software_isp/debayer_cpu.h
+@@ -25,6 +25,7 @@
+ #include "libcamera/internal/software_isp/swstats_cpu.h"
+ 
+ #include "debayer.h"
++#include "raw10_full_frame.h"
+ 
+ namespace libcamera {
+ 
+@@ -154,6 +155,9 @@
+ 	debayerFn debayer2_;
+ 	debayerFn debayer3_;
+ 	Rectangle window_;
++	bool fullFrameEnabled_ = false;
++	Raw10FullFrame fullFrame_;
++	std::vector<uint8_t> fullFrameRaw_;
+ 	std::unique_ptr<SwStatsCpu> stats_;
+ 	unsigned int xShift_; /* Offset of 0/1 applied to window_.x */
+ 
+--- a/src/libcamera/software_isp/software_isp.cpp
++++ b/src/libcamera/software_isp/software_isp.cpp
+@@ -82,8 +82,7 @@
+ SoftwareIsp::SoftwareIsp(PipelineHandler *pipe, const CameraSensor *sensor,
+ 			 ControlInfoMap *ipaControls)
+ 	: ispWorkerThread_("SWIspWorker"),
+-	  dmaHeap_(DmaBufAllocator::DmaBufAllocatorFlag::CmaHeap |
+-		   DmaBufAllocator::DmaBufAllocatorFlag::SystemHeap |
++	  dmaHeap_(DmaBufAllocator::DmaBufAllocatorFlag::SystemHeap |
+ 		   DmaBufAllocator::DmaBufAllocatorFlag::UDmaBuf)
+ {
+ 	if (!dmaHeap_.isValid()) {
+--- /dev/null
++++ b/src/libcamera/software_isp/raw10_full_frame.h
+@@ -0,0 +1,130 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#pragma once
++
++#include <algorithm>
++#include <cstdint>
++#include <cstring>
++#include <vector>
++
++namespace libcamera {
++
++/* Scale the four CFA planes independently, preserving their Bayer order.
++ * Input and output coordinates include the complete active sensor rectangle.
++ * Extra columns supply interpolation neighbours, not a crop of the image.
++ */
++class Raw10FullFrame
++{
++public:
++	struct Axis {
++		unsigned int lo, hi, weight;
++	};
++	unsigned int width = 0, height = 0, stride = 0;
++	unsigned int imageX = 0, imageY = 0, imageWidth = 0, imageHeight = 0;
++	static constexpr unsigned int border = 4;
++
++	bool configure(unsigned int inWidth, unsigned int inHeight, unsigned int inStride,
++		       unsigned int outWidth, unsigned int outHeight)
++	{
++		if (inWidth < 4 || inWidth % 4 || inHeight < 2 || inHeight % 2 ||
++		    inStride < inWidth / 4 * 5 || outWidth < 4 || outWidth % 4 ||
++		    outHeight < 2 || outHeight % 2)
++			return false;
++		inputWidth_ = inWidth;
++		inputStride_ = inStride;
++		width = outWidth;
++		height = outHeight;
++		stride = (width + 2 * border) / 4 * 5;
++		if (uint64_t(width) * inHeight <= uint64_t(height) * inWidth) {
++			imageWidth = width;
++			imageHeight = (uint64_t(width) * inHeight / inWidth) & ~1U;
++		} else {
++			imageHeight = height;
++			imageWidth = (uint64_t(height) * inWidth / inHeight) & ~3U;
++		}
++		if (!imageWidth || !imageHeight)
++			return false;
++		imageX = ((width - imageWidth) / 2) & ~3U;
++		imageY = ((height - imageHeight) / 2) & ~1U;
++		x_ = axis(inWidth / 2, imageWidth / 2);
++		y_ = axis(inHeight / 2, imageHeight / 2);
++		return true;
++	}
++
++	/* yBegin/yEnd are non-overlapping, even row boundaries for the workers. */
++	void rows(const uint8_t *input, uint8_t *output, unsigned int yBegin,
++		  unsigned int yEnd, std::vector<uint8_t> &scratch) const
++	{
++		const unsigned int rowBytes = inputWidth_ / 4 * 5;
++		scratch.resize(4 * rowBytes);
++		for (unsigned int y = yBegin; y < yEnd; y += 2) {
++			uint8_t *dest[2] = { output + size_t(y) * stride,
++					    output + size_t(y + 1) * stride };
++			std::memset(dest[0], 0, 2 * stride);
++			if (y < imageY || y >= imageY + imageHeight)
++				continue;
++			const Axis &ay = y_[(y - imageY) / 2];
++			for (unsigned int p = 0; p < 2; ++p) {
++				std::memcpy(scratch.data() + (2 * p) * rowBytes,
++					    input + size_t(2 * ay.lo + p) * inputStride_, rowBytes);
++				std::memcpy(scratch.data() + (2 * p + 1) * rowBytes,
++					    input + size_t(2 * ay.hi + p) * inputStride_, rowBytes);
++			}
++			for (unsigned int p = 0; p < 2; ++p) {
++				const uint8_t *top = scratch.data() + (2 * p) * rowBytes;
++				const uint8_t *bottom = top + rowBytes;
++				for (unsigned int x = 0; x < imageWidth; x += 4) {
++					uint16_t v[4];
++					for (unsigned int k = 0; k < 4; ++k) {
++						const Axis &ax = x_[(x + k) / 2];
++						const unsigned int phase = k & 1;
++						unsigned int a = blend(sample(top, 2 * ax.lo + phase),
++								       sample(top, 2 * ax.hi + phase), ax.weight);
++						unsigned int b = blend(sample(bottom, 2 * ax.lo + phase),
++								       sample(bottom, 2 * ax.hi + phase), ax.weight);
++						v[k] = blend(a, b, ay.weight);
++					}
++					pack(dest[p] + (border + imageX + x) / 4 * 5, v);
++				}
++				/* Replicate a complete CFA group at horizontal boundaries. */
++				std::memcpy(dest[p], dest[p] + 5, 5);
++				std::memcpy(dest[p] + stride - 5, dest[p] + stride - 10, 5);
++			}
++		}
++	}
++
++	static uint16_t sample(const uint8_t *row, unsigned int x)
++	{
++		const uint8_t *p = row + (x / 4) * 5;
++		return (uint16_t(p[x % 4]) << 2) | ((p[4] >> (2 * (x % 4))) & 3);
++	}
++
++	static void pack(uint8_t *p, const uint16_t v[4])
++	{
++		p[4] = 0;
++		for (unsigned int k = 0; k < 4; ++k) {
++			p[k] = v[k] >> 2;
++			p[4] |= (v[k] & 3) << (2 * k);
++		}
++	}
++
++private:
++	static unsigned int blend(unsigned int a, unsigned int b, unsigned int weight)
++	{
++		return (a * (65536 - weight) + b * weight + 32768) >> 16;
++	}
++	static std::vector<Axis> axis(unsigned int input, unsigned int output)
++	{
++		std::vector<Axis> map(output);
++		for (unsigned int i = 0; i < output; ++i) {
++			/* Align plane endpoints so every edge of the sensor is retained. */
++			uint64_t at = output > 1 ? uint64_t(i) * (input - 1) * 65536 / (output - 1) : 0;
++			map[i] = { unsigned(at >> 16), std::min(unsigned(at >> 16) + 1, input - 1),
++				   unsigned(at & 65535) };
++		}
++		return map;
++	}
++	unsigned int inputWidth_ = 0, inputStride_ = 0;
++	std::vector<Axis> x_, y_;
++};
++
++} /* namespace libcamera */
+--- /dev/null
++++ b/src/ipa/simple/s5k3t1.yaml
+@@ -0,0 +1,23 @@
++# Extracted from the device vendor Chromatix; see adjacent CCM provenance JSON.
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Ccm:
++      ccms:
++        - ct: 2500
++          ccm: [ 1.625400, -0.727400, 0.102000, -0.170400, 1.127900, 0.042500, -0.002400, -0.383300, 1.385700 ]
++        - ct: 2950
++          ccm: [ 1.625400, -0.727400, 0.102000, -0.170400, 1.127900, 0.042500, -0.002400, -0.383300, 1.385700 ]
++        - ct: 3925
++          ccm: [ 1.585980, -0.784691, 0.198711, -0.105471, 1.110976, -0.005505, 0.124162, -0.926599, 1.802437 ]
++        - ct: 5125
++          ccm: [ 1.493364, -0.577548, 0.084184, -0.092448, 1.283834, -0.191386, 0.054287, -0.508554, 1.454267 ]
++        - ct: 6000
++          ccm: [ 1.450298, -0.459575, 0.009277, -0.165410, 1.336005, -0.170595, -0.010939, -0.521164, 1.532104 ]
++  - Adjust:
++  - Agc:
++...
+--- /dev/null
++++ b/src/ipa/simple/imx481.yaml
+@@ -0,0 +1,23 @@
++# Extracted from the device vendor Chromatix; see adjacent CCM provenance JSON.
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Ccm:
++      ccms:
++        - ct: 2450
++          ccm: [ 1.511300, -0.408500, -0.102800, -0.236700, 1.358000, -0.121300, -0.025500, -0.902000, 1.927500 ]
++        - ct: 2900
++          ccm: [ 1.507600, -0.446500, -0.061100, -0.239300, 1.328500, -0.089200, 0.017200, -0.809900, 1.792700 ]
++        - ct: 4000
++          ccm: [ 1.595000, -0.547600, -0.047400, -0.261500, 1.412800, -0.151300, 0.062900, -0.615600, 1.552700 ]
++        - ct: 5050
++          ccm: [ 1.574200, -0.677000, 0.102800, -0.150100, 1.207100, -0.057000, 0.058700, -0.703600, 1.644900 ]
++        - ct: 5800
++          ccm: [ 1.574200, -0.677000, 0.102800, -0.150100, 1.207100, -0.057000, 0.058700, -0.703600, 1.644900 ]
++  - Adjust:
++  - Agc:
++...
+--- /dev/null
++++ b/src/ipa/simple/uncalibrated.yaml
+@@ -0,0 +1,19 @@
++# SPDX-License-Identifier: CC0-1.0
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++  - Awb:
++  # Color correction matrices can be defined here. The CCM algorithm
++  # has a significant performance impact, and should only be enabled
++  # if tuned.
++  # - Ccm:
++  #     ccms:
++  #       - ct: 6500
++  #         ccm: [ 1, 0, 0,
++  #                0, 1, 0,
++  #                0, 0, 1]
++  - Adjust:
++  - Agc:
++...
+--- /dev/null
++++ b/src/ipa/simple/s5k3m5.yaml
+@@ -0,0 +1,23 @@
++# Extracted from the device vendor Chromatix; see adjacent CCM provenance JSON.
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Ccm:
++      ccms:
++        - ct: 2600
++          ccm: [ 1.642000, -0.451800, -0.190200, -0.209800, 1.333200, -0.123400, -0.032200, -0.983600, 2.015800 ]
++        - ct: 2950
++          ccm: [ 1.716800, -0.576200, -0.140600, -0.257500, 1.319500, -0.062000, -0.123100, -1.115600, 2.238700 ]
++        - ct: 3900
++          ccm: [ 1.589500, -0.523600, -0.065900, -0.209100, 1.320000, -0.110900, 0.069000, -0.616900, 1.547900 ]
++        - ct: 5000
++          ccm: [ 1.666400, -0.642800, -0.023600, -0.120500, 1.371500, -0.251000, 0.078800, -0.663600, 1.584800 ]
++        - ct: 5800
++          ccm: [ 1.679200, -0.666200, -0.013000, -0.134000, 1.358900, -0.224900, 0.109600, -0.677700, 1.568100 ]
++  - Adjust:
++  - Agc:
++...
+--- /dev/null
++++ b/src/ipa/simple/imx586.yaml
+@@ -0,0 +1,23 @@
++# Extracted from the device vendor Chromatix; see adjacent CCM provenance JSON.
++%YAML 1.1
++---
++version: 1
++algorithms:
++  - BlackLevel:
++      blackLevel: 4096
++  - Awb:
++  - Ccm:
++      ccms:
++        - ct: 2450
++          ccm: [ 1.511300, -0.408500, -0.102800, -0.236700, 1.358000, -0.121300, -0.055500, -0.902000, 1.957500 ]
++        - ct: 2900
++          ccm: [ 1.545200, -0.463000, -0.082200, -0.242200, 1.374200, -0.132000, 0.002600, -0.839100, 1.836500 ]
++        - ct: 3900
++          ccm: [ 1.595000, -0.547600, -0.047400, -0.258500, 1.412800, -0.154300, 0.052900, -0.615600, 1.562700 ]
++        - ct: 5000
++          ccm: [ 1.590400, -0.686300, 0.095900, -0.156700, 1.226100, -0.069400, 0.052200, -0.713300, 1.661100 ]
++        - ct: 5800
++          ccm: [ 1.590400, -0.686300, 0.095900, -0.156700, 1.226100, -0.069400, 0.052200, -0.713300, 1.661100 ]
++  - Adjust:
++  - Agc:
++...
