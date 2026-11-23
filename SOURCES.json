@@ -55,9 +55,9 @@
     },
     {
       "path": "docs/UPSTREAM.zh-CN.md",
-      "bytes": 2640,
-      "sha256": "e8b27aef2fd466b1ea68989784f1bf0c54ad594e8448314ade62a76d6a856942",
-      "origin": "Publication documentation prepared 2026-11-23",
+      "bytes": 2242,
+      "sha256": "2b52f3edd82cca9a49518d396a45aa8f737e033a14cde77bfbfc5ba2702c695f",
+      "origin": "Official contribution AI-policy correction, 2026-11-23",
       "original_sha256": null
     },
     {
@@ -1336,9 +1336,9 @@
     },
     {
       "path": "README.md",
-      "bytes": 5264,
-      "sha256": "091877beccaf7c6be70e5102a52daec2907e26d885f424d971a4002920764a3e",
-      "origin": "Publication documentation prepared 2026-11-23",
+      "bytes": 5531,
+      "sha256": "0d8133c9a51d7c49357dc4fe5529fa477f2daaeb4fe2d105a1ac7a06dfa89773",
+      "origin": "Official contribution AI-policy correction, 2026-11-23",
       "original_sha256": null
     },
     {

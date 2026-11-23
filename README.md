@@ -44,11 +44,13 @@
 
 ## 文档和贡献
 
+**官方提交限制（2026-11-23 核对）：** Nura 禁止提交全部或部分由生成式 AI 创建的贡献。本项目有 AI 参与，目前不符合该政策，未向官方提交 MR。此前无条件称“可以贡献”的说明已更正，见下方政策文档。
+
 - [功能与验证边界](docs/STATUS.zh-CN.md)
 - [源码来源、版本关系和核验范围](docs/PROVENANCE.md)
 - [构建、DTB 打包、取流命令](docs/BUILD.zh-CN.md)
 - [相机链路、修复原因和 AF 接口](docs/CAMERAS.zh-CN.md)
-- [向官方 postmarketOS 贡献的路径](docs/UPSTREAM.zh-CN.md)
+- [官方贡献政策与 AI 限制](docs/UPSTREAM.zh-CN.md)
 - [本次发布校验](validation/publication-20261123.md)
 
 20261102 目录是历史快照；最终 CAMSS 位于 recovered-final 目录。安装外置模块需要匹配内核配置和完整构建产生的 Module.symvers。请按构建文档复核设备树、电源和固件依赖。
