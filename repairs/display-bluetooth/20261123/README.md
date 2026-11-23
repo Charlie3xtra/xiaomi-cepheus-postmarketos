@@ -4,7 +4,7 @@ Experimental, AI-assisted local repair, not submitted to Nura/postmarketOS. No p
 
 ## Follow-up status: parent probe confirmed, Bluetooth still fails
 
-The coordinator loaded the module: QUP0/UART/hci0 enumerate, but UART protocol3 and QCA timeout prevent Bluetooth function. Official Xiaomi source maps the high-speed UART to **uart13 at0xc8c000**, unlike the current uart9 attachment. See **BLUETOOTH-UART-FINDINGS.md** before any new test; do not persist the QUP0-only candidate as a Bluetooth fix. The service stop path also sets brightness0, explaining another black-screen test confound.
+The coordinator loaded the module: QUP0/UART/hci0 enumerate, but UART protocol3 and QCA timeout prevent Bluetooth function. Official Xiaomi source maps the high-speed UART to **uart13 at0xc8c000**, unlike the current uart9 attachment. See **BLUETOOTH-UART-FINDINGS.md** and **UART13-CANDIDATE.md** before any new test; do not persist the QUP0-only candidate as a Bluetooth fix. The service stop path also sets brightness0, explaining another black-screen test confound. The user subsequently confirmed the exclusive write-path test pattern displays correctly. **DISPLAY-MMAP-FINDINGS.md** traces the missing mmap damage path and recommends a userspace write comparison on #8 first.
 
 ## Original small runtime module experiment
 

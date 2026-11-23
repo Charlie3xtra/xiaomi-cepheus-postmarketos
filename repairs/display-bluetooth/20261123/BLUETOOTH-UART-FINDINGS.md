@@ -29,7 +29,7 @@ The official route plus the observed I2C protocol strongly favor a wrong-SE DT r
 4. Let the standard qcom_geni_serial driver validate protocol. If UART13 is also protocol3, stop and reassess firmware loading/boot configuration with that new evidence. Do not suppress the protocol check or try random other engines.
 5. Only after UART starts and QCA chip version is returned, resolve the exact firmware names requested by hci_qca. hci0 alone is not acceptance. Require HCI version/address (redacted from public logs), scan or paired-device traffic, repeated on/off and suspend/resume tests.
 
-No corrected-route overlay or DTB was generated in this analysis-only follow-up; no device operation, protocol reload, power change, or flashing was performed. Original source, main, and #8 rollback image remain unchanged.
+Following the later request to prepare a reviewable candidate, runtime-uart13 and a private static DTB were generated and validated; see UART13-CANDIDATE.md. No device operation, protocol reload, power change, or flashing was performed. Original source, main, and #8 rollback image remain unchanged.
 
 ## Display boundary update
 

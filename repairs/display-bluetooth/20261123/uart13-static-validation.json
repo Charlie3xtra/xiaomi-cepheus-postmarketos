@@ -1,0 +1,64 @@
+{
+  "candidate_sha256": "6f60a69343441026542a5a2bcabe8e103c9e6154f8d964fcd422e327b0efa284",
+  "node_count_before": 890,
+  "node_count_after": 891,
+  "memreserve_unchanged": true,
+  "exact_whitelist_pass": true,
+  "differences": [
+    {
+      "node": "/soc@0/geniqup@ac0000/serial@a84000",
+      "property": "status",
+      "old": "6f6b617900",
+      "new": "64697361626c656400"
+    },
+    {
+      "node": "/soc@0/geniqup@ac0000/serial@a84000/bluetooth",
+      "property": "status",
+      "old": null,
+      "new": "64697361626c656400"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000",
+      "property": "status",
+      "old": "64697361626c656400",
+      "new": "6f6b617900"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "compatible",
+      "old": null,
+      "new": "71636f6d2c77636e333939302d627400"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "max-speed",
+      "old": null,
+      "new": "0030d400"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "vddch0-supply",
+      "old": null,
+      "new": "00000047"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "vddio-supply",
+      "old": null,
+      "new": "00000044"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "vddrf-supply",
+      "old": null,
+      "new": "00000046"
+    },
+    {
+      "node": "/soc@0/geniqup@cc0000/serial@c8c000/bluetooth",
+      "property": "vddxo-supply",
+      "old": null,
+      "new": "00000045"
+    }
+  ],
+  "hardware_tested": false
+}
