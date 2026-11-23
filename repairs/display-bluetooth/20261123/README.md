@@ -2,7 +2,11 @@
 
 Experimental, AI-assisted local repair, not submitted to Nura/postmarketOS. No phone was accessed or flashed while preparing this branch. The existing #8 boot remains the rollback baseline. No claim of Bluetooth function or white-block resolution is made before hardware testing.
 
-## Start with the small runtime module
+## Follow-up status: parent probe confirmed, Bluetooth still fails
+
+The coordinator loaded the module: QUP0/UART/hci0 enumerate, but UART protocol3 and QCA timeout prevent Bluetooth function. Official Xiaomi source maps the high-speed UART to **uart13 at0xc8c000**, unlike the current uart9 attachment. See **BLUETOOTH-UART-FINDINGS.md** before any new test; do not persist the QUP0-only candidate as a Bluetooth fix. The service stop path also sets brightness0, explaining another black-screen test confound.
+
+## Original small runtime module experiment
 
 `artifacts/cepheus_qup0.ko` enables only `/soc@0/geniqup@ac0000/status`. Guards require xiaomi,cepheus, disabled qcom,geni-se-qup, populated/available parent, no existing wrapper/UART platform devices, exactly two available children: serial@a84000 (qcom,geni-uart plus qcom,wcn3990-bt) and serial@a90000 (qcom,geni-debug-uart). Every other direct child must be disabled. The second UART is an existing enabled early/debug UART; enabling QUP0 allows both to probe. Existing wrapper driver devm_of_platform_populate handles enumeration. No MMIO access, regulator modifications, or manual device creation are added.
 

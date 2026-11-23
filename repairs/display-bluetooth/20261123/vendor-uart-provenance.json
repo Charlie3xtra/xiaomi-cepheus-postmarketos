@@ -1,0 +1,69 @@
+{
+  "vendor_repository": "MiCode/Xiaomi_Kernel_OpenSource",
+  "commit": "136c2470e85cd0fb2fa164c7086536d472e74594",
+  "files": [
+    {
+      "path": "arch/arm64/boot/dts/qcom/cepheus-sm8150.dtsi",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/arch/arm64/boot/dts/qcom/cepheus-sm8150.dtsi",
+      "evidence": [
+        {
+          "line": 6,
+          "text": "#include \"xiaomi-sm8150-common.dtsi\""
+        }
+      ]
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/xiaomi-sm8150-common.dtsi",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/arch/arm64/boot/dts/qcom/xiaomi-sm8150-common.dtsi",
+      "evidence": [
+        {
+          "line": 55,
+          "text": "&qupv3_se13_4uart {"
+        }
+      ]
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/sm8150-qupv3.dtsi",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/arch/arm64/boot/dts/qcom/sm8150-qupv3.dtsi",
+      "evidence": [
+        {
+          "line": 415,
+          "text": "qupv3_se13_4uart: qcom,qup_uart@0xc8c000 {"
+        }
+      ]
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/sm8150-pinctrl.dtsi",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/arch/arm64/boot/dts/qcom/sm8150-pinctrl.dtsi",
+      "evidence": []
+    },
+    {
+      "path": "arch/arm64/boot/dts/qcom/sm8150.dtsi",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/arch/arm64/boot/dts/qcom/sm8150.dtsi",
+      "evidence": [
+        {
+          "line": 64,
+          "text": "serial0 = &qupv3_se12_2uart;"
+        },
+        {
+          "line": 65,
+          "text": "hsuart0 = &qupv3_se13_4uart;"
+        }
+      ]
+    },
+    {
+      "path": "drivers/tty/serial/msm_geni_serial.c",
+      "url": "https://github.com/MiCode/Xiaomi_Kernel_OpenSource/blob/136c2470e85cd0fb2fa164c7086536d472e74594/drivers/tty/serial/msm_geni_serial.c",
+      "evidence": [
+        {
+          "line": 2347,
+          "text": "line = of_alias_get_id(pdev->dev.of_node, \"hsuart\");"
+        },
+        {
+          "line": 2697,
+          "text": ".dev_name = \"ttyHS\","
+        }
+      ]
+    }
+  ]
+}
